@@ -50,6 +50,9 @@ class FlashForgeClient(
     suspend fun sendRawCommand(cmd: String, timeoutMs: Long = 5_000): Result<String> =
         tcp.sendCommandWithResponse(cmd, timeoutMs)
 
+    /** Fire-and-forget raw command (no reply awaited). Used by legacy control paths (e.g. A3 LED). */
+    fun sendCommand(cmd: String) = tcp.sendCommand(cmd)
+
     // ---- Typed status queries ----
 
     suspend fun getPrinterInfo(): Result<PrinterInfo> =
