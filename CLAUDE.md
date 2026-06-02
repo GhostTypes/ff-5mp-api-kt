@@ -2,6 +2,12 @@
 
 Guidance for Claude Code working in this repo.
 
+## Git workflow
+
+**Commit and push directly to `main`.** Do NOT create branches or PRs unless the user explicitly
+asks. Commit at logical checkpoints to keep history organized, and push whenever convenient.
+`local.properties` (the local Android SDK path) is gitignored and must never be committed.
+
 ## What this is
 
 A **Kotlin/JVM (Android-first) port of the `ff-5mp-api-ts` TypeScript library** — a clean-room
