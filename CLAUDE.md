@@ -132,7 +132,9 @@ These are verified against live hardware (an AD5X on firmware 3.1.0) and the
 - **Cleartext HTTP/TCP is required** — printers are plain HTTP/TCP, no TLS. (On Android this
   needs a network-security-config; that's the *app's* concern, but the library must not assume TLS.)
 - **Firmware serializes numbers inconsistently** (decimals vs ints). Every numeric `/detail`
-  field must be a nullable float (`Float?`/`Double?`), **not** Int — only `pid` is an Int.
+  field must be a nullable **`Float?`**, **not** Int — only `pid` is an Int. (`Float`, not `Double`:
+  it's the unification target shared with the consuming app's `Float`-native Compose UI, so reads
+  cross the boundary with no conversion. Don't reintroduce `Double` — see `docs/parity.md`.)
 - **`/detail` is the single source of truth for modern printers** (status + IFS inline). TCP is
   control-only for modern (custom LEDs `~M146`, homing `~G28`). Only the legacy backend polls over TCP.
 - **Model detection is pid-based** (35=5M, 36=5M Pro, 38=AD5X) on first `/detail`; legacy printers

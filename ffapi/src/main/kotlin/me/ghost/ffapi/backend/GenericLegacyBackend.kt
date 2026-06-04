@@ -106,18 +106,18 @@ class GenericLegacyBackend(
             ?.substringAfter("MachineStatus:")?.trim().orEmpty()
 
     private fun parseTemps(response: String): Temps {
-        var eCur: Double? = null; var eTar: Double? = null
-        var bCur: Double? = null; var bTar: Double? = null
+        var eCur: Float? = null; var eTar: Float? = null
+        var bCur: Float? = null; var bTar: Float? = null
         for (part in response.split(" ", "\n")) {
             val t = part.trim()
             if (t.startsWith("T0:")) {
                 val s = t.substring(3)
-                if (s.contains("/")) { val p = s.split("/"); eCur = p[0].toDoubleOrNull(); eTar = p[1].toDoubleOrNull() }
-                else eCur = s.toDoubleOrNull()
+                if (s.contains("/")) { val p = s.split("/"); eCur = p[0].toFloatOrNull(); eTar = p[1].toFloatOrNull() }
+                else eCur = s.toFloatOrNull()
             } else if (t.startsWith("B:") && !t.startsWith("B@")) {
                 val s = t.substring(2)
-                if (s.contains("/")) { val p = s.split("/"); bCur = p[0].toDoubleOrNull(); bTar = p[1].toDoubleOrNull() }
-                else bCur = s.toDoubleOrNull()
+                if (s.contains("/")) { val p = s.split("/"); bCur = p[0].toFloatOrNull(); bTar = p[1].toFloatOrNull() }
+                else bCur = s.toFloatOrNull()
             }
         }
         return Temps(eCur, eTar, bCur, bTar)
@@ -131,10 +131,10 @@ class GenericLegacyBackend(
             .find { it.startsWith("Layer:") }
             ?.let { Regex("""Layer:\s*(\d+)\s*/\s*(\d+)""", RegexOption.IGNORE_CASE).find(it) }
         return Progress(
-            sdMatch?.groupValues?.get(1)?.toDoubleOrNull(),
-            sdMatch?.groupValues?.get(2)?.toDoubleOrNull(),
-            layerMatch?.groupValues?.get(1)?.toDoubleOrNull(),
-            layerMatch?.groupValues?.get(2)?.toDoubleOrNull(),
+            sdMatch?.groupValues?.get(1)?.toFloatOrNull(),
+            sdMatch?.groupValues?.get(2)?.toFloatOrNull(),
+            layerMatch?.groupValues?.get(1)?.toFloatOrNull(),
+            layerMatch?.groupValues?.get(2)?.toFloatOrNull(),
         )
     }
 
@@ -156,10 +156,10 @@ class GenericLegacyBackend(
         val progress = parseProgress(progressResp)
         val printProgress = run {
             val cur = progress.progressPercent; val total = progress.progressTotal
-            if (cur != null && total != null && total > 0.0) return@run cur / total
+            if (cur != null && total != null && total > 0f) return@run cur / total
             val layer = progress.currentLayer ?: return@run null
             val layers = progress.totalLayers ?: return@run null
-            if (layers > 0.0) layer / layers else null
+            if (layers > 0f) layer / layers else null
         }
         return FFPrinterDetail(
             status = status,
@@ -177,12 +177,12 @@ class GenericLegacyBackend(
     }
 
     private data class Temps(
-        val extCurrent: Double? = null, val extTarget: Double? = null,
-        val bedCurrent: Double? = null, val bedTarget: Double? = null,
+        val extCurrent: Float? = null, val extTarget: Float? = null,
+        val bedCurrent: Float? = null, val bedTarget: Float? = null,
     )
 
     private data class Progress(
-        val progressPercent: Double? = null, val progressTotal: Double? = null,
-        val currentLayer: Double? = null, val totalLayers: Double? = null,
+        val progressPercent: Float? = null, val progressTotal: Float? = null,
+        val currentLayer: Float? = null, val totalLayers: Float? = null,
     )
 }

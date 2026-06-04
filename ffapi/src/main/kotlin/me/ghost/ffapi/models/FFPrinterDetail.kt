@@ -9,33 +9,38 @@ import kotlinx.serialization.Serializable
  * endpoint). Transformed into the structured [FFMachineInfo] by [MachineInfo.fromDetail].
  *
  * IMPORTANT — the firmware is **inconsistent** about numeric types: some numbers arrive as decimals
- * (`platTemp:27.75`, `estimatedTime:0.0`) and others as ints (`printDuration:0`). kotlinx
- * deserialization fails to parse a decimal literal into an `Int`, so every field that could arrive
- * fractional is typed `Double?` (`Double` rather than `Float` to preserve decimals like `210.3`
- * exactly). Only the genuinely-integer firmware id [pid] stays `Int?`.
+ * (`platTemp:27.75`, `estimatedTime:0.0`, `platTargetTemp:60.0`) and others as ints
+ * (`printDuration:0`, `printLayer:21`). kotlinx deserialization fails to parse a decimal literal into
+ * an `Int`, so every field that could arrive fractional is typed `Float?`. `Float` (not `Double`) is
+ * the deliberate unification target across the app and this library — printer telemetry needs nothing
+ * near double precision, and the app's Compose UI is `Float`-native, so this eliminates all
+ * `Float`/`Double` conversions at the boundary. Conceptually-integer fields like `printLayer` /
+ * `nozzleCnt` stay `Float?` too (the firmware has been observed appending `.0` to whole values, so
+ * typing them `Int?` would risk a deserialization crash). Only the genuinely-integer firmware id
+ * [pid] stays `Int?`.
  */
 @Serializable
 data class FFPrinterDetail(
     val autoShutdown: String? = null,
-    val autoShutdownTime: Double? = null,
+    val autoShutdownTime: Float? = null,
     val cameraStreamUrl: String? = null,
-    val chamberFanSpeed: Double? = null,
-    val chamberTargetTemp: Double? = null,
-    val chamberTemp: Double? = null,
-    val coolingFanSpeed: Double? = null,
-    val coolingFanLeftSpeed: Double? = null,
-    val cumulativeFilament: Double? = null,
-    val cumulativePrintTime: Double? = null,
-    val currentPrintSpeed: Double? = null,
+    val chamberFanSpeed: Float? = null,
+    val chamberTargetTemp: Float? = null,
+    val chamberTemp: Float? = null,
+    val coolingFanSpeed: Float? = null,
+    val coolingFanLeftSpeed: Float? = null,
+    val cumulativeFilament: Float? = null,
+    val cumulativePrintTime: Float? = null,
+    val currentPrintSpeed: Float? = null,
     val doorStatus: String? = null,
     val errorCode: String? = null,
-    val estimatedLeftLen: Double? = null,
-    val estimatedLeftWeight: Double? = null,
-    val estimatedRightLen: Double? = null,
-    val estimatedRightWeight: Double? = null,
-    val estimatedTime: Double? = null,
+    val estimatedLeftLen: Float? = null,
+    val estimatedLeftWeight: Float? = null,
+    val estimatedRightLen: Float? = null,
+    val estimatedRightWeight: Float? = null,
+    val estimatedTime: Float? = null,
     val externalFanStatus: String? = null,
-    val fillAmount: Double? = null,
+    val fillAmount: Float? = null,
     val firmwareVersion: String? = null,
     val flashRegisterCode: String? = null,
     val hasMatlStation: Boolean? = null,
@@ -46,32 +51,32 @@ data class FFPrinterDetail(
     val internalFanStatus: String? = null,
     val ipAddr: String? = null,
     val leftFilamentType: String? = null,
-    val leftTargetTemp: Double? = null,
-    val leftTemp: Double? = null,
+    val leftTargetTemp: Float? = null,
+    val leftTemp: Float? = null,
     val lightStatus: String? = null,
     val location: String? = null,
     val macAddr: String? = null,
     val measure: String? = null,
     val name: String? = null,
-    val nozzleCnt: Double? = null,
+    val nozzleCnt: Float? = null,
     val nozzleModel: String? = null,
-    val nozzleStyle: Double? = null,
+    val nozzleStyle: Float? = null,
     val pid: Int? = null,
-    val platTargetTemp: Double? = null,
-    val platTemp: Double? = null,
+    val platTargetTemp: Float? = null,
+    val platTemp: Float? = null,
     val polarRegisterCode: String? = null,
-    val printDuration: Double? = null,
+    val printDuration: Float? = null,
     val printFileName: String? = null,
     val printFileThumbUrl: String? = null,
-    val printLayer: Double? = null,
-    val printProgress: Double? = null,
-    val printSpeedAdjust: Double? = null,
-    val remainingDiskSpace: Double? = null,
+    val printLayer: Float? = null,
+    val printProgress: Float? = null,
+    val printSpeedAdjust: Float? = null,
+    val remainingDiskSpace: Float? = null,
     val rightFilamentType: String? = null,
-    val rightTargetTemp: Double? = null,
-    val rightTemp: Double? = null,
+    val rightTargetTemp: Float? = null,
+    val rightTemp: Float? = null,
     val status: String? = null,
-    val targetPrintLayer: Double? = null,
-    val tvoc: Double? = null,
-    val zAxisCompensation: Double? = null,
+    val targetPrintLayer: Float? = null,
+    val tvoc: Float? = null,
+    val zAxisCompensation: Float? = null,
 )

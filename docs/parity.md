@@ -24,9 +24,13 @@ literal translation.
 
 ## Models
 
-- **`/detail` numeric fields are `Double?`** (TS `number`). `Double` preserves decimals like `210.3`
-  exactly; the firmware serializes numbers inconsistently (decimals vs ints) so they must be
-  nullable floating-point, never `Int`. Only `pid` is `Int?`.
+- **`/detail` numeric fields are `Float?`** (TS `number`). The firmware serializes numbers
+  inconsistently (decimals vs ints) so they must be nullable floating-point, never `Int`. `Float`
+  (not `Double`) is the deliberate unification target across the library and the consuming app — its
+  Compose UI is `Float`-native, so this eliminates all `Float`/`Double` conversions at the boundary;
+  printer telemetry needs nothing near double precision. Conceptually-integer fields like `printLayer`
+  / `nozzleCnt` stay `Float?` too (firmware has been observed appending `.0` to whole values). Only
+  `pid` is `Int?`. (`FFMachineInfo` + `Temperature` are likewise `Float`.)
 - **`PrintStatus.getPrintPercent()` returns `Int?` (null)** when layer total is 0, instead of the TS
   `NaN`.
 - Property names are idiomatic Kotlin (`typeName`, `isAD5X`, …) vs the TS PascalCase.

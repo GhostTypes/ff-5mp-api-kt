@@ -35,32 +35,32 @@ class MachineInfo {
             isPro = (detail.name ?: "").contains("Pro") && !isAD5X
         }
 
-        val estimatedTime = detail.estimatedTime ?: 0.0
-        val printProgress = detail.printProgress ?: 0.0
+        val estimatedTime = detail.estimatedTime ?: 0f
+        val printProgress = detail.printProgress ?: 0f
         val printEta = formatTimeFromSeconds(estimatedTime)
         val completionTimeMillis = System.currentTimeMillis() + (estimatedTime * 1000).toLong()
-        val formattedRunTime = formatTimeFromSeconds(detail.printDuration ?: 0.0)
+        val formattedRunTime = formatTimeFromSeconds(detail.printDuration ?: 0f)
 
-        val totalMinutes = (detail.cumulativePrintTime ?: 0.0).toLong()
+        val totalMinutes = (detail.cumulativePrintTime ?: 0f).toLong()
         val hours = totalMinutes / 60
         val minutes = totalMinutes % 60
         val formattedTotalRunTime = "${hours}h:${minutes}m"
 
-        val totalJobFilamentMeters = (detail.estimatedRightLen ?: 0.0) / 1000.0
+        val totalJobFilamentMeters = (detail.estimatedRightLen ?: 0f) / 1000f
         val estLength = totalJobFilamentMeters * printProgress
-        val estWeight = (detail.estimatedRightWeight ?: 0.0) * printProgress
+        val estWeight = (detail.estimatedRightWeight ?: 0f) * printProgress
 
         return FFMachineInfo(
             autoShutdown = (detail.autoShutdown ?: "") == "open",
-            autoShutdownTime = detail.autoShutdownTime ?: 0.0,
+            autoShutdownTime = detail.autoShutdownTime ?: 0f,
             cameraStreamUrl = detail.cameraStreamUrl ?: "",
-            chamberFanSpeed = detail.chamberFanSpeed ?: 0.0,
-            coolingFanSpeed = detail.coolingFanSpeed ?: 0.0,
+            chamberFanSpeed = detail.chamberFanSpeed ?: 0f,
+            coolingFanSpeed = detail.coolingFanSpeed ?: 0f,
             coolingFanLeftSpeed = detail.coolingFanLeftSpeed, // null when absent
-            cumulativeFilament = detail.cumulativeFilament ?: 0.0,
-            cumulativePrintTime = detail.cumulativePrintTime ?: 0.0,
-            currentPrintSpeed = detail.currentPrintSpeed ?: 0.0,
-            freeDiskSpace = String.format(Locale.US, "%.2f", detail.remainingDiskSpace ?: 0.0),
+            cumulativeFilament = detail.cumulativeFilament ?: 0f,
+            cumulativePrintTime = detail.cumulativePrintTime ?: 0f,
+            currentPrintSpeed = detail.currentPrintSpeed ?: 0f,
+            freeDiskSpace = String.format(Locale.US, "%.2f", detail.remainingDiskSpace ?: 0f),
             doorOpen = (detail.doorStatus ?: "") == "open",
             errorCode = detail.errorCode ?: "",
             estLength = estLength,
@@ -71,7 +71,7 @@ class MachineInfo {
             lightsOn = (detail.lightStatus ?: "") == "open",
             ipAddress = detail.ipAddr ?: "",
             macAddress = detail.macAddr ?: "",
-            fillAmount = detail.fillAmount ?: 0.0,
+            fillAmount = detail.fillAmount ?: 0f,
             firmwareVersion = detail.firmwareVersion ?: "",
             name = detail.name ?: "",
             pid = pid,
@@ -82,26 +82,26 @@ class MachineInfo {
             matlStationInfo = detail.matlStationInfo,
             indepMatlInfo = detail.indepMatlInfo,
             printBed = Temperature(
-                current = detail.platTemp ?: 0.0,
-                set = detail.platTargetTemp ?: 0.0,
+                current = detail.platTemp ?: 0f,
+                set = detail.platTargetTemp ?: 0f,
             ),
             extruder = Temperature(
-                current = detail.rightTemp ?: 0.0,
-                set = detail.rightTargetTemp ?: 0.0,
+                current = detail.rightTemp ?: 0f,
+                set = detail.rightTargetTemp ?: 0f,
             ),
-            printDuration = detail.printDuration ?: 0.0,
+            printDuration = detail.printDuration ?: 0f,
             printFileName = detail.printFileName ?: "",
             printFileThumbUrl = detail.printFileThumbUrl ?: "",
-            currentPrintLayer = (detail.printLayer ?: 0.0).toInt(),
+            currentPrintLayer = (detail.printLayer ?: 0f).toInt(),
             printProgress = printProgress,
             printProgressInt = floor(printProgress * 100).toInt(),
-            printSpeedAdjust = detail.printSpeedAdjust ?: 0.0,
+            printSpeedAdjust = detail.printSpeedAdjust ?: 0f,
             filamentType = detail.rightFilamentType ?: "",
             machineState = getMachineState(detail.status ?: ""),
             status = detail.status ?: "",
-            totalPrintLayers = (detail.targetPrintLayer ?: 0.0).toInt(),
-            tvoc = detail.tvoc ?: 0.0,
-            zAxisCompensation = detail.zAxisCompensation ?: 0.0,
+            totalPrintLayers = (detail.targetPrintLayer ?: 0f).toInt(),
+            tvoc = detail.tvoc ?: 0f,
+            zAxisCompensation = detail.zAxisCompensation ?: 0f,
             flashCloudRegisterCode = detail.flashRegisterCode ?: "",
             polarCloudRegisterCode = detail.polarRegisterCode ?: "",
             printEta = printEta,
@@ -112,8 +112,8 @@ class MachineInfo {
     }
 
     /** Formats a duration in seconds as "HH:MM" (zero-padded). Returns "00:00" on bad input. */
-    private fun formatTimeFromSeconds(seconds: Double): String {
-        val valid = if (seconds.isFinite()) seconds else 0.0
+    private fun formatTimeFromSeconds(seconds: Float): String {
+        val valid = if (seconds.isFinite()) seconds else 0f
         val hours = floor(valid / 3600).toInt()
         val minutes = floor((valid % 3600) / 60).toInt()
         return "%02d:%02d".format(hours, minutes)

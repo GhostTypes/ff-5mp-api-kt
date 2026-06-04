@@ -72,17 +72,17 @@ data class FFGcodeToolData(
     val slotId: Int = 0,
     val materialName: String = "",
     val materialColor: String = "",
-    val filamentWeight: Double? = null,
+    val filamentWeight: Float? = null,
 )
 
 /** One entry in `/gcodeList`. AD5X populates [gcodeToolDatas]; older printers give only the name. */
 @Serializable
 data class FFGcodeFileEntry(
     val gcodeFileName: String = "",
-    val printingTime: Double? = null,
+    val printingTime: Float? = null,
     val gcodeToolCnt: Int? = null,
     val gcodeToolDatas: List<FFGcodeToolData>? = null,
-    val totalFilamentWeight: Double? = null,
+    val totalFilamentWeight: Float? = null,
     val useMatlStation: Boolean? = null,
 ) {
     val isMultiColor: Boolean get() = (gcodeToolDatas?.size ?: 0) > 1

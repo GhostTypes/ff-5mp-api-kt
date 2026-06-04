@@ -14,11 +14,11 @@ class MachineInfoTest {
 
     private fun ad5xDetail(name: String = "AD5X", pid: Int? = 38) = FFPrinterDetail(
         autoShutdown = "close",
-        autoShutdownTime = 30.0,
+        autoShutdownTime = 30f,
         cameraStreamUrl = "",
-        coolingFanLeftSpeed = 0.0,
-        coolingFanSpeed = 0.0,
-        cumulativeFilament = 0.0,
+        coolingFanLeftSpeed = 0f,
+        coolingFanSpeed = 0f,
+        cumulativeFilament = 0f,
         firmwareVersion = "1.1.3-1.0.8",
         hasMatlStation = true,
         indepMatlInfo = IndepMatlInfo(materialName = "?"),
@@ -37,8 +37,8 @@ class MachineInfoTest {
         name = name,
         nozzleModel = "0.4mm",
         pid = pid,
-        platTargetTemp = 0.0,
-        platTemp = 27.75,
+        platTargetTemp = 0f,
+        platTemp = 27.75f,
     )
 
     private fun genericDetail(name: String = "FlashForge 5M", pid: Int? = null) = FFPrinterDetail(
@@ -47,14 +47,14 @@ class MachineInfoTest {
         firmwareVersion = "1.0.0",
         ipAddr = "192.168.1.100",
         macAddr = "AA:BB:CC:DD:EE:FF",
-        coolingFanSpeed = 100.0,
-        platTemp = 60.5,
-        platTargetTemp = 60.0,
-        rightTemp = 210.3,
-        rightTargetTemp = 210.0,
+        coolingFanSpeed = 100f,
+        platTemp = 60.5f,
+        platTargetTemp = 60.0f,
+        rightTemp = 210.3f,
+        rightTargetTemp = 210.0f,
         status = "ready",
-        cumulativePrintTime = 1200.0,
-        cumulativeFilament = 500.75,
+        cumulativePrintTime = 1200f,
+        cumulativeFilament = 500.75f,
     )
 
     @Test
@@ -65,7 +65,7 @@ class MachineInfoTest {
         assertFalse(r.isPro)
         assertEquals("1.1.3-1.0.8", r.firmwareVersion)
         assertEquals(true, r.hasMatlStation)
-        assertEquals(0.0, r.coolingFanLeftSpeed!!, 1e-9)
+        assertEquals(0f, r.coolingFanLeftSpeed!!, 1e-6f)
         assertEquals(4, r.matlStationInfo!!.slotCnt)
         assertEquals(4, r.matlStationInfo!!.slotInfos.size)
         assertEquals("PLA", r.matlStationInfo!!.slotInfos[0].materialName)
@@ -73,8 +73,8 @@ class MachineInfoTest {
         assertEquals("#2750E0", r.matlStationInfo!!.slotInfos[1].materialColor)
         assertEquals("?", r.indepMatlInfo!!.materialName)
         assertEquals("192.168.0.204", r.ipAddress)
-        assertEquals(27.75, r.printBed.current, 1e-9)
-        assertEquals(0.0, r.extruder.current, 1e-9)
+        assertEquals(27.75f, r.printBed.current, 1e-6f)
+        assertEquals(0f, r.extruder.current, 1e-6f)
         assertEquals(MachineState.Unknown, r.machineState)
     }
 
@@ -96,9 +96,9 @@ class MachineInfoTest {
         assertNull(r.matlStationInfo)
         assertNull(r.indepMatlInfo)
         assertNull(r.coolingFanLeftSpeed)
-        assertEquals(100.0, r.coolingFanSpeed, 1e-9)
-        assertEquals(60.5, r.printBed.current, 1e-9)
-        assertEquals(210.3, r.extruder.current, 1e-9)
+        assertEquals(100f, r.coolingFanSpeed, 1e-6f)
+        assertEquals(60.5f, r.printBed.current, 1e-6f)
+        assertEquals(210.3f, r.extruder.current, 1e-6f)
         assertEquals(MachineState.Ready, r.machineState)
         assertEquals("20h:0m", r.formattedTotalRunTime)
     }
@@ -156,9 +156,9 @@ class MachineInfoTest {
         assertFalse(r.isAD5X)
         assertFalse(r.isPro)
         assertEquals("", r.firmwareVersion)
-        assertEquals(0.0, r.coolingFanSpeed, 1e-9)
-        assertEquals(0.0, r.printBed.current, 1e-9)
-        assertEquals(0.0, r.extruder.set, 1e-9)
+        assertEquals(0f, r.coolingFanSpeed, 1e-6f)
+        assertEquals(0f, r.printBed.current, 1e-6f)
+        assertEquals(0f, r.extruder.set, 1e-6f)
         assertEquals(MachineState.Unknown, r.machineState)
     }
 
