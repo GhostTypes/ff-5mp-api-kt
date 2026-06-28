@@ -54,11 +54,28 @@ literal translation.
   `ThumbnailInfo` parser is retained for the TCP string-response path; the TS `saveToFile` (Node
   `fs`) is dropped — Android consumers handle the bytes.
 
+## Creator 5 family
+
+The Creator 5 / Creator 5 Pro is HTTP-only (no legacy TCP/8899 service), driven by
+`Creator5Backend`:
+
+- **Fail-fast TCP overrides.** TCP-only operations (`home`, `listLocalFiles`, `slotAction`) throw
+  `NotSupportedException` instead of the TS no-op-on-httpOnly pattern — surfaces misuse at the
+  backend boundary rather than silently doing nothing.
+- **Reuses `AD5XMaterialMapping`** as the shared material-mapping type (the TS
+  `Creator5MaterialMapping` converged to the same 5-field shape in v1.6.0, so a separate type is
+  unnecessary).
+- **`setChamberTemp` is capability-gated** (`hasChamberControl`) rather than sent unconditionally
+  — only the Creator 5 family has a chamber heater. (TS sends it unconditionally and relies on
+  other models ignoring the field.)
+- **`waitForPartCool()` is not ported** (TS no-ops it on httpOnly; no internal caller).
+
 ## Not yet ported (TODO)
 
 - `FiveMClient` composition root + the `Control` / `Info` / `Files` / `JobControl` / `TempControl`
   module split. The `PrinterBackend` tier + `FlashForgeHttpApi` currently cover the same surface.
-- File **upload** (HTTP multipart `/uploadGcode` with firmware-version headers, and TCP M28/M29).
+- TCP file transfer (M28/M29) for legacy printers. (HTTP multipart `/uploadGcode` upload **is**
+  implemented for the AD5X and Creator 5.)
 - Dedicated `FlashForgeA3Client` / `FlashForgeA4Client` subclasses (legacy quirks currently live in
   `FlashForgeTcpClient` + `GenericLegacyBackend`).
 - Camera-stream detection probe (`detectCameraStream`).

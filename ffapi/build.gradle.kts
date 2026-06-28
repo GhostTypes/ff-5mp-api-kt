@@ -49,14 +49,14 @@ dependencies {
 }
 
 // Publish to mavenLocal() so the app workspace can consume it as
-//   me.ghost:ff-5mp-api-kt:0.1.1
+//   me.ghost:ff-5mp-api-kt:0.2.0
 // via `./gradlew :ffapi:publishToMavenLocal`.
 publishing {
   publications {
     register<MavenPublication>("release") {
       groupId = "me.ghost"
       artifactId = "ff-5mp-api-kt"
-      version = "0.1.1"
+      version = "0.2.0"
       afterEvaluate { from(components["release"]) }
     }
   }
