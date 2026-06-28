@@ -31,9 +31,6 @@ class AD5XBackend(
 
     override fun materialStation(detail: FFPrinterDetail): MatlStationInfo? = detail.matlStationInfo
 
-    override suspend fun setSlotMaterial(slot: Int, materialName: String, hexRgb: String): Result<Unit> =
-        http.configureSlot(printer.serialNumber, printer.checkCode, slot, materialName, hexRgb)
-
     override suspend fun slotAction(slot: Int, action: SlotAction): Result<Unit> =
         http.slotAction(printer.serialNumber, printer.checkCode, slot, action.code)
 

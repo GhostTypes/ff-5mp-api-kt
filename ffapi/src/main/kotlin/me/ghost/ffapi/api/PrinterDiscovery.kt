@@ -17,13 +17,15 @@ data class DiscoveredPrinter(
     val name: String,
     /** Serial number (modern 276-byte protocol only; empty for legacy). */
     val serialNumber: String,
-    /** True for the modern 276-byte protocol (5M/5M Pro/AD5X); false for legacy 140-byte (A3/A4). */
+    /** True for the modern 276-byte protocol (5M/5M Pro/AD5X/Creator 5); false for legacy 140-byte (A3/A4). */
     val isModern: Boolean,
     /** TCP G-code command port (typically 8899). */
     val commandPort: Int,
     /** HTTP API port (8898 for modern; defaulted for legacy). */
     val httpPort: Int,
-    /** Best-effort model from the broadcast name; authoritative detection is via `/detail`. */
+    /** USB product id read from offset 0x88 (authoritative model discriminator for modern packets). */
+    val productId: Int,
+    /** Best-effort model from the USB pid (preferred) or broadcast name; authoritative detection is via `/detail`. */
     val model: PrinterModel,
 )
 
@@ -122,9 +124,12 @@ object PrinterDiscovery {
         val name = decodeCString(buf, 0, 128)
         val isModern = len >= 276
         val commandPort = ((buf[0x84].toInt() and 0xFF) shl 8) or (buf[0x85].toInt() and 0xFF)
+        // USB product id at offset 0x88 (BE u16). Authoritative model discriminator for modern
+        // packets — same value space as the firmware `/detail` `pid` and the update-checker keys.
+        val productId = ((buf[0x88].toInt() and 0xFF) shl 8) or (buf[0x89].toInt() and 0xFF)
         val httpPort = if (isModern) ((buf[0x8E].toInt() and 0xFF) shl 8) or (buf[0x8F].toInt() and 0xFF) else 8898
         val serial = if (isModern) decodeCString(buf, 146, 128) else ""
-        return DiscoveredPrinter(ip, name, serial, isModern, commandPort, httpPort, detectModel(name, isModern))
+        return DiscoveredPrinter(ip, name, serial, isModern, commandPort, httpPort, productId, detectModel(name, isModern, productId))
     }
 
     /** Decodes a null-terminated UTF-8 string from [buf] starting at [offset], up to [maxLen] bytes. */
@@ -135,14 +140,34 @@ object PrinterDiscovery {
         return String(buf, offset, nullAt - offset, Charsets.UTF_8).trim()
     }
 
-    private fun detectModel(name: String, isModern: Boolean): PrinterModel {
+    /**
+     * Canonical USB product ids (offset 0x88) for modern printers — the authoritative,
+     * user-immutable model discriminator (unlike `productType` 0x5A02, which only identifies the
+     * 5M *family*). Same value space as the firmware `/detail` `pid`.
+     */
+    private val MODERN_PRODUCT_IDS = mapOf(
+        0x0023 to PrinterModel.ADVENTURER_5M,
+        0x0024 to PrinterModel.ADVENTURER_5M_PRO,
+        0x0026 to PrinterModel.AD5X,
+        0x0028 to PrinterModel.CREATOR_5,
+        0x0029 to PrinterModel.CREATOR_5_PRO,
+    )
+    private fun detectModel(name: String, isModern: Boolean, productId: Int): PrinterModel {
+        if (isModern) {
+            // USB product id is authoritative (firmware-set, not user-mutable).
+            MODERN_PRODUCT_IDS[productId]?.let { return it }
+            val upper = name.uppercase()
+            return when {
+                upper.contains("CREATOR 5 PRO") -> PrinterModel.CREATOR_5_PRO
+                upper.contains("CREATOR 5") -> PrinterModel.CREATOR_5
+                upper == "AD5X" || upper.contains("5X") -> PrinterModel.AD5X
+                upper.contains("PRO") -> PrinterModel.ADVENTURER_5M_PRO
+                upper.contains("5M") || upper.contains("AD5M") -> PrinterModel.ADVENTURER_5M
+                else -> PrinterModel.UNKNOWN
+            }
+        }
         val upper = name.uppercase()
-        return if (isModern) when {
-            upper == "AD5X" || upper.contains("5X") -> PrinterModel.AD5X
-            upper.contains("PRO") -> PrinterModel.ADVENTURER_5M_PRO
-            upper.contains("5M") || upper.contains("AD5M") -> PrinterModel.ADVENTURER_5M
-            else -> PrinterModel.UNKNOWN
-        } else when {
+        return when {
             upper.contains("ADVENTURER 4") || upper.contains("AD4") -> PrinterModel.ADVENTURER_4
             upper.contains("ADVENTURER 3") || upper.contains("AD3") -> PrinterModel.ADVENTURER_3
             else -> PrinterModel.GENERIC_LEGACY

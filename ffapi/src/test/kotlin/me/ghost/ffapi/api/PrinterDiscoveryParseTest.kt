@@ -61,4 +61,35 @@ class PrinterDiscoveryParseTest {
     @Test fun `returns null for too-short buffers`() {
         assertNull(PrinterDiscovery.parseResponse(ByteArray(100), 100, "192.168.1.53"))
     }
+
+    @Test fun `parses a modern Creator 5 response by product id`() {
+        val buf = ByteArray(276)
+        putString(buf, 0, "Creator 5")
+        putPortBE(buf, 0x84, 8899)
+        putPortBE(buf, 0x88, 0x0028)
+        putPortBE(buf, 0x8E, 8898)
+        val p = PrinterDiscovery.parseResponse(buf, 276, "192.168.1.60")!!
+        assertTrue(p.isModern)
+        assertEquals(0x0028, p.productId)
+        assertEquals(PrinterModel.CREATOR_5, p.model)
+    }
+
+    @Test fun `parses a modern Creator 5 Pro response by product id`() {
+        val buf = ByteArray(276)
+        putString(buf, 0, "Creator 5 Pro")
+        putPortBE(buf, 0x84, 8899)
+        putPortBE(buf, 0x88, 0x0029)
+        val p = PrinterDiscovery.parseResponse(buf, 276, "192.168.1.61")!!
+        assertEquals(0x0029, p.productId)
+        assertEquals(PrinterModel.CREATOR_5_PRO, p.model)
+    }
+
+    @Test fun `prefers product id over name for model detection`() {
+        val buf = ByteArray(276)
+        putString(buf, 0, "AD5X")
+        putPortBE(buf, 0x84, 8899)
+        putPortBE(buf, 0x88, 0x0028)
+        val p = PrinterDiscovery.parseResponse(buf, 276, "192.168.1.62")!!
+        assertEquals(PrinterModel.CREATOR_5, p.model)
+    }
 }

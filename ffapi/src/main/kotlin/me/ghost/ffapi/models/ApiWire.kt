@@ -63,6 +63,22 @@ data class ControlPayload(val cmd: String, val args: JsonElement)
 @Serializable data class ReNameArgs(val name: String)
 @Serializable data class DelayCloseArgs(val automaticShutdown: String, val shutdownAfterTime: Int)
 
+/**
+ * `temperatureCtl_cmd` argument body (HTTP-only Creator 5 temperature transport). The scalar fields
+ * `rightNozzle` / `leftNozzle` / `platform` / `chamber` are always present; [nozzles] is the
+ * Creator 5's per-tool array (only emitted when non-null — the 5M / 5M Pro path omits it). Off
+ * semantics: scalar heaters use -100 ([me.ghost.ffapi.api.controls.TempControl.TEMP_OFF]); per-tool
+ * array entries use 0 ([me.ghost.ffapi.api.controls.TempControl.NOZZLE_OFF]).
+ */
+@Serializable
+data class TempCtlArgs(
+    val rightNozzle: Int,
+    val leftNozzle: Int,
+    val platform: Int,
+    val chamber: Int,
+    val nozzles: List<Int>? = null,
+)
+
 // ---- Files ----
 
 /** Per-tool material info in a multi-color G-code file (AD5X `gcodeListDetail`). */
@@ -141,4 +157,23 @@ data class PrintGcodeRequestLegacy(
     val checkCode: String,
     val fileName: String,
     val levelingBeforePrint: Boolean = false,
+)
+
+/**
+ * Creator 5 `/printGcode` body (print-start material matching). Distinct from the AD5X
+ * [PrintGcodeRequest]: the C5 firmware does NOT read `useMatlStation` / `gcodeToolCnt` /
+ * `firstLayerInspection` here (those live on the upload; `firstLayerInspection` doesn't exist on
+ * the C5 at all). `flowCalibration` / `timeLapseVideo` are always present (default false);
+ * [materialMappings] is omitted entirely when null (single-tool print). Confirmed via a live C5
+ * `/printGcode` capture.
+ */
+@Serializable
+data class Creator5PrintGcodeRequest(
+    val serialNumber: String,
+    val checkCode: String,
+    val fileName: String,
+    val levelingBeforePrint: Boolean = false,
+    val flowCalibration: Boolean = false,
+    val timeLapseVideo: Boolean = false,
+    val materialMappings: List<AD5XMaterialMapping>? = null,
 )

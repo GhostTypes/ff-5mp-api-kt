@@ -17,12 +17,14 @@ import kotlinx.serialization.Serializable
  * `Float`/`Double` conversions at the boundary. Conceptually-integer fields like `printLayer` /
  * `nozzleCnt` stay `Float?` too (the firmware has been observed appending `.0` to whole values, so
  * typing them `Int?` would risk a deserialization crash). Only the genuinely-integer firmware id
- * [pid] stays `Int?`.
+ * [pid] stays `Int?`, along with the Creator 5 capability flags [camera] / [lidar] (0/1 booleans the
+ * firmware reports as bare integers, matching the TS `=== 1` checks).
  */
 @Serializable
 data class FFPrinterDetail(
     val autoShutdown: String? = null,
     val autoShutdownTime: Float? = null,
+    val camera: Int? = null,
     val cameraStreamUrl: String? = null,
     val chamberFanSpeed: Float? = null,
     val chamberTargetTemp: Float? = null,
@@ -53,14 +55,21 @@ data class FFPrinterDetail(
     val leftFilamentType: String? = null,
     val leftTargetTemp: Float? = null,
     val leftTemp: Float? = null,
+    val lidar: Int? = null,
     val lightStatus: String? = null,
     val location: String? = null,
     val macAddr: String? = null,
     val measure: String? = null,
     val name: String? = null,
+    /** Immutable factory model name (e.g. "Creator 5 Pro"); not user-editable. Creator 5 series. */
+    val model: String? = null,
     val nozzleCnt: Float? = null,
     val nozzleModel: String? = null,
     val nozzleStyle: Float? = null,
+    /** Per-tool target nozzle temps (one entry per nozzle). Creator 5 series multi-nozzle. */
+    val nozzleTargetTemps: List<Float>? = null,
+    /** Per-tool current nozzle temps (one entry per nozzle). Creator 5 series multi-nozzle. */
+    val nozzleTemps: List<Float>? = null,
     val pid: Int? = null,
     val platTargetTemp: Float? = null,
     val platTemp: Float? = null,

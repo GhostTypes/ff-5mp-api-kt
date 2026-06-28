@@ -27,9 +27,10 @@ abstract class DualApiBackend(
             ledControl = httpLed || base.ledControl,
             ledViaHttp = httpLed,
             // The /product fan flags are unreliable on the plain 5M (reports both non-zero despite
-            // no filtration), so gate on the model as well.
-            filtrationControl = model == PrinterModel.ADVENTURER_5M_PRO &&
-                product.internalFanCtrlState != 0 && product.externalFanCtrlState != 0,
+            // no filtration), so gate on the model as well. Creator 5 Pro filtration is forced on
+            // in baselineCapabilities(); preserve it here via `base.filtrationControl`.
+            filtrationControl = base.filtrationControl || (model == PrinterModel.ADVENTURER_5M_PRO &&
+                product.internalFanCtrlState != 0 && product.externalFanCtrlState != 0),
         )
     }
 }

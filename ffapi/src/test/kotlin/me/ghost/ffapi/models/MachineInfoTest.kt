@@ -57,6 +57,31 @@ class MachineInfoTest {
         cumulativeFilament = 500.75f,
     )
 
+    private fun creator5Detail(
+        name: String = "Creator 5",
+        pid: Int? = 40,
+        model: String? = "Creator 5",
+    ) = FFPrinterDetail(
+        name = name,
+        model = model,
+        pid = pid,
+        firmwareVersion = "1.0.0",
+        status = "ready",
+        nozzleCnt = 4f,
+        nozzleTemps = listOf(200f, 0f, 210f, 0f),
+        nozzleTargetTemps = listOf(210f, 0f, 210f, 0f),
+        camera = 1,
+        lidar = 1,
+        chamberTemp = 45f,
+        chamberTargetTemp = 50f,
+        platTemp = 60f,
+        platTargetTemp = 60f,
+        rightTemp = 200f,
+        rightTargetTemp = 210f,
+        ipAddr = "192.168.1.70",
+        macAddr = "AA:BB:CC:DD:EE:01",
+    )
+
     @Test
     fun `parses AD5X details`() {
         val r = converter.fromDetail(ad5xDetail())!!
@@ -169,5 +194,64 @@ class MachineInfoTest {
         )!!
         assertNotNull(r)
         assertEquals("http://192.168.1.100:8080/?action=stream", r.cameraStreamUrl)
+    }
+
+    @Test
+    fun `detects Creator 5 from pid 40`() {
+        val r = converter.fromDetail(creator5Detail(pid = 40))!!
+        assertTrue(r.isCreator5)
+        assertFalse(r.isCreator5Pro)
+        assertFalse(r.isAD5X)
+        assertFalse(r.isPro)
+        assertEquals(40, r.pid)
+        assertEquals("Creator 5", r.model)
+    }
+
+    @Test
+    fun `detects Creator 5 Pro from pid 41`() {
+        val r = converter.fromDetail(creator5Detail(pid = 41, model = "Creator 5 Pro"))!!
+        assertTrue(r.isCreator5)
+        assertTrue(r.isCreator5Pro)
+        assertTrue(r.hasDoorSensor)
+        assertEquals("Creator 5 Pro", r.model)
+    }
+
+    @Test
+    fun `parses Creator 5 multi-nozzle tool temps and capabilities`() {
+        val r = converter.fromDetail(creator5Detail())!!
+        assertEquals(4, r.nozzleCount)
+        assertEquals(4, r.toolTemps.size)
+        assertEquals(200f, r.toolTemps[0].current, 1e-6f)
+        assertEquals(210f, r.toolTemps[0].set, 1e-6f)
+        assertEquals(0f, r.toolTemps[1].current, 1e-6f)
+        assertEquals(210f, r.toolTemps[2].current, 1e-6f)
+        assertEquals(45f, r.chamber.current, 1e-6f)
+        assertEquals(50f, r.chamber.set, 1e-6f)
+        assertTrue(r.hasCamera)
+        assertTrue(r.hasLidar)
+    }
+
+    @Test
+    fun `single-nozzle models report one tool temp mirroring the extruder`() {
+        val r = converter.fromDetail(genericDetail())!!
+        assertEquals(1, r.toolTemps.size)
+        assertEquals(r.extruder.current, r.toolTemps[0].current, 1e-6f)
+        assertEquals(r.extruder.set, r.toolTemps[0].set, 1e-6f)
+        assertFalse(r.hasCamera)
+        assertFalse(r.hasLidar)
+        assertFalse(r.hasDoorSensor)
+    }
+
+    @Test
+    fun `hasCamera is true when cameraStreamUrl is present`() {
+        val r = converter.fromDetail(genericDetail().copy(cameraStreamUrl = "http://x/stream"))!!
+        assertTrue(r.hasCamera)
+        assertFalse(r.hasLidar)
+    }
+
+    @Test
+    fun `model falls back to pid-derived name when detail model is absent`() {
+        val r = converter.fromDetail(creator5Detail(name = "MyC5", model = null))!!
+        assertEquals("Creator 5", r.model)
     }
 }
