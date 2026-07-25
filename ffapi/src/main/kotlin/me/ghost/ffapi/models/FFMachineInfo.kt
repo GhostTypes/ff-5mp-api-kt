@@ -9,8 +9,10 @@ data class Temperature(
 /**
  * Structured, user-friendly view of the printer's state, produced from [FFPrinterDetail] by
  * [MachineInfo.fromDetail]. Ported from the TS `FFMachineInfo`. Nullable fields ([pid],
- * [hasMatlStation], [coolingFanLeftSpeed], [matlStationInfo], [indepMatlInfo]) are left null when
- * the source `/detail` omitted them, preserving the TS "undefined" semantics.
+ * [coolingFanLeftSpeed], [matlStationInfo], [indepMatlInfo]) are left null when the source
+ * `/detail` omitted them, preserving the TS "undefined" semantics. Capability flags are the
+ * exception: they are derived and non-null, never a passthrough of a field the firmware may
+ * simply not send — see [hasMatlStation].
  */
 data class FFMachineInfo(
     val autoShutdown: Boolean,
@@ -80,7 +82,16 @@ data class FFMachineInfo(
     val completionTimeMillis: Long,
     val formattedRunTime: String,
     val formattedTotalRunTime: String,
-    val hasMatlStation: Boolean?,
+    /**
+     * Whether a Material Station is attached.
+     *
+     * Derived by [MachineInfo.fromDetail] from the station data, NOT copied from the raw
+     * `hasMatlStation` field — that one is AD5X-only and the Creator 5 series never reports it,
+     * station attached or not. Non-null on purpose: a capability has no unknown state, and
+     * offering one is what let an unreported flag read as absent hardware. For the untouched
+     * firmware value, read [FFPrinterDetail.hasMatlStation].
+     */
+    val hasMatlStation: Boolean,
     val matlStationInfo: MatlStationInfo?,
     val indepMatlInfo: IndepMatlInfo?,
 )

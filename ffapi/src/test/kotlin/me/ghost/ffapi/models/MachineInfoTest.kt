@@ -57,14 +57,21 @@ class MachineInfoTest {
         cumulativeFilament = 500.75f,
     )
 
+    /**
+     * A Creator 5 as the hardware reports it. Note the absent `hasMatlStation`: that field is
+     * AD5X-only and this family never sends it, station attached or not — pass
+     * [matlStationInfo] to model one that is.
+     */
     private fun creator5Detail(
         name: String = "Creator 5",
         pid: Int? = 40,
         model: String? = "Creator 5",
+        matlStationInfo: MatlStationInfo? = null,
     ) = FFPrinterDetail(
         name = name,
         model = model,
         pid = pid,
+        matlStationInfo = matlStationInfo,
         firmwareVersion = "1.0.0",
         status = "ready",
         nozzleCnt = 4f,
@@ -117,7 +124,8 @@ class MachineInfoTest {
         assertEquals("FlashForge 5M", r.name)
         assertFalse(r.isAD5X)
         assertFalse(r.isPro)
-        assertNull(r.hasMatlStation)
+        // False, not null: the capability is answered, not passed through.
+        assertFalse(r.hasMatlStation)
         assertNull(r.matlStationInfo)
         assertNull(r.indepMatlInfo)
         assertNull(r.coolingFanLeftSpeed)
@@ -214,6 +222,34 @@ class MachineInfoTest {
         assertTrue(r.isCreator5Pro)
         assertTrue(r.hasDoorSensor)
         assertEquals("Creator 5 Pro", r.model)
+    }
+
+    @Test
+    fun `reports the material station on a Creator 5 Pro, which never sends the flag`() {
+        // Regression test: hasMatlStation used to be a copy of detail.hasMatlStation, which the
+        // Creator 5 series does not send at all. The flag arrived null and every consumer gating
+        // on it concluded there was no station, while matlStationInfo listed four loaded slots.
+        // Verified against real hardware (pid 41, firmware 1.9.4).
+        val station = MatlStationInfo(
+            slotCnt = 4,
+            slotInfos = listOf(
+                SlotInfo(hasFilament = true, materialColor = "#1B1B1B", materialName = "PLA", slotId = 1),
+                SlotInfo(hasFilament = true, materialColor = "#1B1B1B", materialName = "PETG", slotId = 2),
+                SlotInfo(hasFilament = true, materialColor = "#FFFFFF", materialName = "PLA", slotId = 3),
+                SlotInfo(hasFilament = true, materialColor = "#805003", materialName = "PLA", slotId = 4),
+            ),
+        )
+        val detail = creator5Detail(pid = 41, model = "Creator 5 Pro", matlStationInfo = station)
+        assertNull(detail.hasMatlStation) // exactly what the printer sends
+
+        val r = converter.fromDetail(detail)!!
+
+        assertTrue(r.hasMatlStation)
+        assertEquals(4, r.matlStationInfo!!.slotCnt)
+        assertEquals("PETG", r.matlStationInfo!!.slotInfos[1].materialName)
+        // Deriving the station must not drag a Creator 5 into AD5X detection.
+        assertFalse(r.isAD5X)
+        assertTrue(r.isCreator5Pro)
     }
 
     @Test

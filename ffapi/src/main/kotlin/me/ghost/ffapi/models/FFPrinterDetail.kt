@@ -45,6 +45,11 @@ data class FFPrinterDetail(
     val fillAmount: Float? = null,
     val firmwareVersion: String? = null,
     val flashRegisterCode: String? = null,
+    /**
+     * AD5X-only, and firmware omits what does not apply: the Creator 5 series leaves this out of
+     * `/detail` even with four loaded slots, so null means "not reported", NOT "no station".
+     * Never gate a feature on it — read the derived [FFMachineInfo.hasMatlStation] instead.
+     */
     val hasMatlStation: Boolean? = null,
     val matlStationInfo: MatlStationInfo? = null,
     val indepMatlInfo: IndepMatlInfo? = null,

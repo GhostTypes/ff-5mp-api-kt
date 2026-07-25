@@ -18,6 +18,11 @@ class MachineInfo {
     fun fromDetail(detail: FFPrinterDetail?): FFMachineInfo? {
         if (detail == null) return null
 
+        // Material Station presence, derived rather than read off a single field.
+        // `hasMatlStation` is AD5X-only: the Creator 5 series omits it from /detail entirely
+        // (verified on a Creator 5 Pro, pid 41) while reporting a fully populated
+        // matlStationInfo with four loaded slots, so an absent flag means "not reported",
+        // never "absent hardware". Populated slot data is the reliable signal.
         val hasMaterialStation = detail.hasMatlStation == true ||
             (detail.matlStationInfo?.slotCnt ?: 0) > 0 ||
             (detail.matlStationInfo?.slotInfos?.size ?: 0) > 0
@@ -118,7 +123,10 @@ class MachineInfo {
             hasLidar = hasLidar,
             hasDoorSensor = hasDoorSensor,
             nozzleSize = detail.nozzleModel ?: "",
-            hasMatlStation = detail.hasMatlStation,
+            // The DERIVED value, not detail.hasMatlStation: that field is AD5X-only and the
+            // Creator 5 series omits it entirely even with four loaded slots, so the raw value
+            // is null on exactly the models that have a station.
+            hasMatlStation = hasMaterialStation,
             matlStationInfo = detail.matlStationInfo,
             indepMatlInfo = detail.indepMatlInfo,
             printBed = Temperature(
