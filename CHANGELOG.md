@@ -7,12 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-07-28
+## [0.3.0] - 2026-08-19
 ### Fixed
 - **`FFMachineInfo.hasMatlStation` no longer misses the Material Station on the Creator 5 series.** It was a straight copy of the raw `hasMatlStation` value from `/detail`, which is an AD5X-only field — a Creator 5 Pro omits it entirely (verified on real hardware, pid 41, firmware 1.9.4) while reporting a fully populated `matlStationInfo` with four loaded slots. It therefore arrived `null`, and consumers gating on it saw no station on exactly the models that have one. `fromDetail` already computed the correct value for its own AD5X heuristic (flag `== true` OR `slotCnt > 0` OR non-empty `slotInfos`) and then discarded it; that derived value is now what the property exposes.
 
 ### Changed
 - **`FFMachineInfo.hasMatlStation` is now a non-null `Boolean`** rather than `Boolean?`. A capability has no "unknown" state, and offering one is the mechanism of the bug above: firmware omits what does not apply, so an absent field reads as `null`, and `null` reads as "no". `FFPrinterDetail.hasMatlStation` keeps the untouched firmware value and stays nullable, because there the absence *is* the information.
+
+### Docs
+- Neutralize internal provenance phrasing in comments and KDoc — firmware versions and observed behavior stay, internal tooling references go
+- Fix the chamber-control capability reference in `docs/parity.md` to `PrinterCapabilities.chamberTempControl`
+- README: fix the ff-5mp-api-ts link, genericize internal app references, soften live-verification wording
+- Extend `EndstopStatus` KDoc to cover `FilamentStatus` and both LED line variants; consolidate the `hasMatlStation` rationale into `FFMachineInfo`
+- Update stale `httpOnly`/capability breadcrumbs in `PrinterBackend`/`PrinterModel` to describe current behavior
 
 ## [0.2.0] - 2026-06-28
 ### Added
@@ -44,8 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - UDP discovery (pure-JVM core + optional `MulticastLock`), verified against live 5M Pro and AD5X hardware
 - CLAUDE.md porting guide, README consumption guide, and `docs/parity.md`
 
-[Unreleased]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/7985d29424c1f42e4f334d49b2759bc6e05b8d57...HEAD
-[0.3.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/6f4fd2deab6c479894bc56ee928ae24d04db2e06...7985d29424c1f42e4f334d49b2759bc6e05b8d57
+[Unreleased]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/b369382f79e340c65539e30343c5c72e8309b17b...HEAD
+[0.3.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/6f4fd2deab6c479894bc56ee928ae24d04db2e06...b369382f79e340c65539e30343c5c72e8309b17b
 [0.2.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/131b442f10afa828ef8bceae6ee646453a6654c9...6f4fd2deab6c479894bc56ee928ae24d04db2e06
 [0.1.1]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/02dde7f35360834304d280e3b2cab2e51604da48...131b442f10afa828ef8bceae6ee646453a6654c9
 [0.1.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/57db60b089634561345a1edf52583504def88cc8...02dde7f35360834304d280e3b2cab2e51604da48
