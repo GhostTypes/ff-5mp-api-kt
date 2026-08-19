@@ -65,9 +65,9 @@ The Creator 5 / Creator 5 Pro is HTTP-only (no legacy TCP/8899 service), driven 
 - **Reuses `AD5XMaterialMapping`** as the shared material-mapping type (the TS
   `Creator5MaterialMapping` converged to the same 5-field shape in v1.6.0, so a separate type is
   unnecessary).
-- **`setChamberTemp` is capability-gated** (`hasChamberControl`) rather than sent unconditionally
-  — only the Creator 5 family has a chamber heater. (TS sends it unconditionally and relies on
-  other models ignoring the field.)
+- **`setChamberTemp` is capability-gated** (`PrinterCapabilities.chamberTempControl`) rather than
+  sent unconditionally — only the Creator 5 family has a chamber heater. (TS sends it
+  unconditionally and relies on other models ignoring the field.)
 - **`waitForPartCool()` is not ported** (TS no-ops it on httpOnly; no internal caller).
 
 ## Not yet ported (TODO)

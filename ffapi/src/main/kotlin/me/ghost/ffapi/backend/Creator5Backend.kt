@@ -19,8 +19,8 @@ import me.ghost.ffapi.tcpapi.FlashForgeClient
  * `connect()`ed on this path (consumers should gate on [httpOnly]).
  *
  * Hardware: a 4-tool material station (the 4 tool heads surface as slots via `msConfig_cmd`), a
- * heated chamber, and (Pro only) confirmed air-filtration hardware (forced on regardless of
- * `/product` flags). Filament load/unload (`ms_cmd`) is NOT available — only the AD5X has that.
+ * heated chamber, and (Pro only) air-filtration hardware. Filament load/unload (`ms_cmd`) is NOT
+ * available — only the AD5X has that.
  *
  * @param creatorModel the specific Creator 5 series model ([PrinterModel.CREATOR_5] or
  *   [PrinterModel.CREATOR_5_PRO]).
@@ -94,8 +94,8 @@ class Creator5Backend(
 
     /**
      * Validates Creator 5 material mappings: toolId 0-3, slotId 1-4, non-empty materialName, and
-     * `#RRGGBB` tool/slot colors. The C5 mapping shape is identical to the AD5X (confirmed via a
-     * live `/printGcode` capture). At most 4 mappings.
+     * `#RRGGBB` tool/slot colors. The C5 mapping shape is identical to the AD5X (confirmed
+     * against a live Creator 5). At most 4 mappings.
      */
     internal fun validateCreator5MaterialMappings(mappings: List<AD5XMaterialMapping>): Boolean {
         if (mappings.size > 4) return false
@@ -111,8 +111,8 @@ class Creator5Backend(
 
     // ---- TCP-only operations are unavailable on this HTTP-only model ----
     // The Creator 5 has no legacy TCP control channel. These would hang on a dead socket, so they
-    // fail fast with NotSupportedException. (The Creator 5 may expose some via its Klipper HTTP
-    // g-code path, but those schemas are unconfirmed; route them here once they are.)
+    // fail fast with NotSupportedException. (The printer may expose some via its HTTP g-code
+    // endpoint, but those schemas are unconfirmed; route them here once they are.)
 
     /** Homing requires the TCP G-code channel — unavailable on the HTTP-only Creator 5. */
     override suspend fun home(): Result<Unit> =

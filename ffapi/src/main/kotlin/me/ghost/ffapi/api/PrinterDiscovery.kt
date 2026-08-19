@@ -48,7 +48,7 @@ object PrinterDiscovery {
     )
 
     /**
-     * Scans the LAN for printers. [retries] rounds, each listening [roundTimeoutMs}; stops early on
+     * Scans the LAN for printers. [retries] rounds, each listening [roundTimeoutMs]; stops early on
      * the first round that finds anything. Provide [context] on Android to hold a MulticastLock.
      */
     suspend fun discover(

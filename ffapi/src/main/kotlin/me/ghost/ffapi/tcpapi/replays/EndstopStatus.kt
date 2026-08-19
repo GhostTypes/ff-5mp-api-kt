@@ -29,8 +29,10 @@ class Status(data: String) {
 
 /**
  * Endstop + machine/move status parsed from an `~M119` reply. Ported from the TS `EndstopStatus`.
- * Tolerant of line ordering (matches by prefix) and of the legacy `LEDStatus:`/`PrintFileName:`
- * variants used by Adventurer 3 firmware.
+ * Tolerant of line ordering — each field is found by keyword/prefix match, not by position — and
+ * of the legacy `LEDStatus:`/`PrintFileName:` variants used by Adventurer 3 firmware. Optional
+ * lines: `FilamentStatus:` is exposed as [filamentStatus], and the LED is read both ways —
+ * `LEDStatus:` carries `on`/`off` as a word, `LED:` carries it as a number (1 = on).
  */
 class EndstopStatus {
     var endstop: Endstop? = null

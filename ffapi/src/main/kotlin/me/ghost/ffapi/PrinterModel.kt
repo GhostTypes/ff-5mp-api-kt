@@ -83,7 +83,8 @@ enum class PrinterModel {
  * @property ledViaHttp `true` to drive the LED over HTTP `lightControl_cmd` (factory LEDs); `false`
  *   to drive it over TCP `~M146` (custom LEDs).
  * @property chamberTempControl heated-chamber temperature control is available (Creator 5 series);
- *   the chamber setpoint is driven over HTTP — see the temp-control transport step.
+ *   the chamber setpoint is driven over HTTP — see
+ *   [me.ghost.ffapi.backend.PrinterBackend.setChamberTemp].
  */
 data class PrinterCapabilities(
     val model: PrinterModel = PrinterModel.UNKNOWN,

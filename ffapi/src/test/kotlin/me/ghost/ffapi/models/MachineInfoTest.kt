@@ -229,7 +229,7 @@ class MachineInfoTest {
         // Regression test: hasMatlStation used to be a copy of detail.hasMatlStation, which the
         // Creator 5 series does not send at all. The flag arrived null and every consumer gating
         // on it concluded there was no station, while matlStationInfo listed four loaded slots.
-        // Verified against real hardware (pid 41, firmware 1.9.4).
+        // Verified against real hardware (firmware 1.9.4).
         val station = MatlStationInfo(
             slotCnt = 4,
             slotInfos = listOf(

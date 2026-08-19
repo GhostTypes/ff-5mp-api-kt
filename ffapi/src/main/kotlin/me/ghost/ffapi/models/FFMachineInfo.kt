@@ -45,7 +45,7 @@ data class FFMachineInfo(
     val isAD5X: Boolean,
     /** Creator 5 / Creator 5 Pro (4-head tool-changer); false on every other model. */
     val isCreator5: Boolean,
-    /** Specifically a Creator 5 Pro (pid 41); drives the door-sensor + filtration capabilities. */
+    /** Specifically a Creator 5 Pro ([MachineInfo.PID_CREATOR_5_PRO]); drives the door-sensor + filtration capabilities. */
     val isCreator5Pro: Boolean,
     /** Tool count (`detail.nozzleCnt`, or [toolTemps] size). Single-nozzle = 1, Creator 5 = 4. */
     val nozzleCount: Int,
@@ -87,9 +87,10 @@ data class FFMachineInfo(
      *
      * Derived by [MachineInfo.fromDetail] from the station data, NOT copied from the raw
      * `hasMatlStation` field — that one is AD5X-only and the Creator 5 series never reports it,
-     * station attached or not. Non-null on purpose: a capability has no unknown state, and
-     * offering one is what let an unreported flag read as absent hardware. For the untouched
-     * firmware value, read [FFPrinterDetail.hasMatlStation].
+     * station attached or not (verified on a Creator 5 Pro reporting four loaded slots with the
+     * flag absent). Non-null on purpose: a capability has no unknown state, and offering one is
+     * what let an unreported flag read as absent hardware. For the untouched firmware value, read
+     * [FFPrinterDetail.hasMatlStation].
      */
     val hasMatlStation: Boolean,
     val matlStationInfo: MatlStationInfo?,

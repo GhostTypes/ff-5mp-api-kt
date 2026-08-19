@@ -33,8 +33,8 @@ import java.net.SocketTimeoutException
 enum class KeepAliveMode { MODERN, LEGACY_POLL, NONE }
 
 /**
- * Low-level TCP socket client for FlashForge printers (port 8899). Ported from the flashforgeui-app
- * Kotlin implementation (verified against live hardware), which itself implements the FlashForge
+ * Low-level TCP socket client for FlashForge printers (port 8899). Ported from the app's Kotlin
+ * implementation (verified on live hardware), which itself implements the FlashForge
  * wire protocol from ff-5mp-api-ts. Uses a persistent read loop + [Mutex]-serialized command
  * exchange + keep-alive + auto-reconnect, rather than the TS one-shot listener model.
  *

@@ -26,14 +26,13 @@ object TempControl {
      * Value that turns a tool/nozzle OFF inside the `nozzles` array. Unlike the scalar heater
      * fields (which accept [TEMP_OFF] = -100), the Creator 5 firmware's per-nozzle parser only
      * treats a literal 0 as "off" — it ignores -100 in the `nozzles` array and the tool keeps
-     * heating. (Firmware-confirmed via tester report; the v1.6.1 bugfix.)
+     * heating. (Observed on live hardware; this is the ff-5mp-api-ts v1.6.1 nozzle-off bugfix.)
      */
     const val NOZZLE_OFF = 0
 
     /**
      * Number of tool/nozzle entries the Creator 5 firmware requires in the `nozzles` array. The
-     * firmware ignores the array unless its length is exactly this (confirmed via Ghidra:
-     * `size() == 4` check in the temp parser).
+     * firmware ignores the array unless its length is exactly this (verified in the firmware).
      */
     const val NOZZLE_COUNT = 4
 

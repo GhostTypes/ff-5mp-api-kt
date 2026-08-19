@@ -164,8 +164,8 @@ data class PrintGcodeRequestLegacy(
  * [PrintGcodeRequest]: the C5 firmware does NOT read `useMatlStation` / `gcodeToolCnt` /
  * `firstLayerInspection` here (those live on the upload; `firstLayerInspection` doesn't exist on
  * the C5 at all). `flowCalibration` / `timeLapseVideo` are always present (default false);
- * [materialMappings] is omitted entirely when null (single-tool print). Confirmed via a live C5
- * `/printGcode` capture.
+ * [materialMappings] is omitted entirely when null (single-tool print). Confirmed against a live
+ * Creator 5.
  */
 @Serializable
 data class Creator5PrintGcodeRequest(

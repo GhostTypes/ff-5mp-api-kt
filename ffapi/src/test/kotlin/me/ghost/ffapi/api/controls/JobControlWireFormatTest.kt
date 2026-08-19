@@ -92,7 +92,7 @@ class JobControlWireFormatTest {
         assertEquals(false, body["flowCalibration"]!!.jsonPrimitive.boolean)
         assertEquals(false, body["timeLapseVideo"]!!.jsonPrimitive.boolean)
 
-        // Confirmed C5 capture: these fields do NOT belong on the /printGcode body.
+        // Confirmed on a live C5: these fields do NOT belong on the /printGcode body.
         assertFalse("useMatlStation must be absent", body.containsKey("useMatlStation"))
         assertFalse("gcodeToolCnt must be absent", body.containsKey("gcodeToolCnt"))
         assertFalse("firstLayerInspection must be absent", body.containsKey("firstLayerInspection"))

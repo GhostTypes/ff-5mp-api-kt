@@ -50,7 +50,7 @@ import java.util.Base64
 import java.util.concurrent.TimeUnit
 
 /**
- * HTTP REST transport for modern FlashForge printers (port 8898). Ported from the flashforgeui-app
+ * HTTP REST transport for modern FlashForge printers (port 8898). Ported from the app's
  * `FlashForgeHttpApi`, with the generic exceptions replaced by the library's typed hierarchy:
  * network failures → [PrinterUnreachableException], rejected credentials → [AuthException] (on the
  * credentialed `/detail` and `/product` reads), other non-zero API codes → [ApiErrorException].

@@ -14,8 +14,8 @@ import kotlin.math.sqrt
  * precomputed-Lab behavior) so the snapped output is byte-for-byte identical.
  *
  * The Creator 5 `msConfig_cmd` only renders a color icon when the `rgb` field is an EXACT,
- * case-sensitive match against one of the firmware's 24 built-in palette strings (compared via
- * `std::operator==` @0x0042c5e0 in `firmwareExe` 1.9.2). A non-match leaves the slot's color index
+ * case-sensitive match against one of the firmware's 24 built-in palette strings (verified in
+ * firmware 1.9.2). A non-match leaves the slot's color index
  * at 0 (White). These values differ from the AD5X palette (e.g. Blue is `#4CAAF8` here vs `#45A8F9`
  * on the AD5X), so callers must snap against THIS list specifically. The AD5X accepts freeform hex
  * (with the `#` stripped), so the two wire formats are mutually exclusive.
@@ -29,7 +29,7 @@ object Creator5Palette {
     private data class Lab(val l: Double, val a: Double, val b: Double)
 
     /**
-     * The firmware's 24-entry UI palette (firmwareExe 1.9.2, Ghidra-confirmed). Index 0 (White) is
+     * The firmware's 24-entry UI palette (verified in firmware 1.9.2). Index 0 (White) is
      * also what the firmware falls back to on a no-match.
      */
     val CREATOR5_PALETTE: List<Color> = listOf(

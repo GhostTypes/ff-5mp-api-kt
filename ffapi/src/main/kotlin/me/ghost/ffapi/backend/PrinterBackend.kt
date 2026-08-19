@@ -42,8 +42,9 @@ abstract class PrinterBackend(
 
     /**
      * `true` for HTTP-only models (Creator 5 series) that expose no usable TCP command channel for
-     * control. Step 5 wires the TCP control methods ([setNozzleTemp], [home], ...) to short-circuit
-     * when this is set; for now it is just derived from [model] so the plumbing is in place.
+     * control. [setNozzleTemp], [setBedTemp], [cancelNozzleTemp] and [cancelBedTemp] check this
+     * flag and route through the HTTP `temperatureCtl_cmd` instead of TCP; [Creator5Backend]
+     * overrides the TCP-only [home] / [listLocalFiles] to fail fast.
      */
     open val httpOnly: Boolean
         get() = model == PrinterModel.CREATOR_5 || model == PrinterModel.CREATOR_5_PRO
@@ -57,7 +58,7 @@ abstract class PrinterBackend(
             model = model,
             hasMaterialStation = true,
             chamberTempControl = true,
-            // The Pro has confirmed filtration hardware; force it on regardless of `/product` flags.
+            // Filtration forced on for the Pro only — see Creator5Backend.baselineCapabilities.
             filtrationControl = model == PrinterModel.CREATOR_5_PRO,
         )
         else -> PrinterCapabilities(model = model)
