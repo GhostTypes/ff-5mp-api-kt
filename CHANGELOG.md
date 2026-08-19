@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+### Fixed
+- Serialize HTTP command submission. The command POSTs (`/control`, `/product`, `/printGcode`) now run through a per-client FIFO mutex: commands execute one at a time in submission order, and a failed command does not block later ones. Read endpoints (`/detail`, `/gcodeList`, `/gcodeThumb`, camera) and file uploads stay off the mutex, so polling never waits behind a command and pause/stop never waits behind an upload.
 
 ## [0.3.0] - 2026-08-19
 ### Fixed

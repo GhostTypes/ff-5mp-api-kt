@@ -1,6 +1,8 @@
 package me.ghost.ffapi.api
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.encodeToString
@@ -76,6 +78,17 @@ class FlashForgeHttpApi(
     private val mediaType = "application/json; charset=utf-8".toMediaType()
     private val octetStream = "application/octet-stream".toMediaType()
 
+    /**
+     * Serializes command-submission POSTs so concurrent commands take turns instead of
+     * interleaving on the printer. The mutex is fair: waiters acquire it in first-in,
+     * first-out (FIFO) order.
+     *
+     * Scope: `/control`, `/product` and `/printGcode`. Reads (`/detail`, `/gcodeList`,
+     * `/gcodeThumb`, camera bytes) and `/uploadGcode` stay OUTSIDE the lock. An upload can run
+     * for minutes. A pause or stop command must never queue behind one.
+     */
+    private val commandMutex = Mutex()
+
     // ---- Reads (credentialed) ----
 
     /** `POST /detail`. Non-zero API code is treated as rejected credentials. */
@@ -87,7 +100,7 @@ class FlashForgeHttpApi(
     }
 
     /** `POST /product`. Doubles as credential validation — non-zero code is rejected credentials. */
-    suspend fun getProduct(serialNumber: String, checkCode: String): Result<Product> = post(Endpoints.PRODUCT,
+    suspend fun getProduct(serialNumber: String, checkCode: String): Result<Product> = postCommand(Endpoints.PRODUCT,
         json.encodeToString(CredentialsRequest(serialNumber, checkCode))) { body ->
         val w = json.decodeFromString<ProductResponse>(body)
         if (w.code != 0) throw AuthException()
@@ -168,14 +181,14 @@ class FlashForgeHttpApi(
     // ---- Printing ----
 
     suspend fun printGcode(req: PrintGcodeRequest): Result<Unit> =
-        post(Endpoints.GCODE_PRINT, json.encodeToString(req)) { checkOk(it) }
+        postCommand(Endpoints.GCODE_PRINT, json.encodeToString(req)) { checkOk(it) }
 
     /** Creator 5 `/printGcode` body (distinct field set — see [Creator5PrintGcodeRequest]). */
     suspend fun printGcodeCreator5(req: Creator5PrintGcodeRequest): Result<Unit> =
-        post(Endpoints.GCODE_PRINT, json.encodeToString(req)) { checkOk(it) }
+        postCommand(Endpoints.GCODE_PRINT, json.encodeToString(req)) { checkOk(it) }
 
     suspend fun printGcodeLegacy(serialNumber: String, checkCode: String, fileName: String, leveling: Boolean): Result<Unit> =
-        post(Endpoints.GCODE_PRINT, json.encodeToString(PrintGcodeRequestLegacy(serialNumber, checkCode, fileName, leveling))) { checkOk(it) }
+        postCommand(Endpoints.GCODE_PRINT, json.encodeToString(PrintGcodeRequestLegacy(serialNumber, checkCode, fileName, leveling))) { checkOk(it) }
 
     // ---- Upload (multipart `/uploadGcode`) ----
 
@@ -296,7 +309,7 @@ class FlashForgeHttpApi(
     // ---- Internals ----
 
     private suspend inline fun <reified T> control(serialNumber: String, checkCode: String, cmd: String, args: T): Result<Unit> =
-        post(
+        postCommand(
             Endpoints.CONTROL,
             json.encodeToString(ControlRequest(serialNumber, checkCode, ControlPayload(cmd, json.encodeToJsonElement(args)))),
         ) { checkOk(it) }
@@ -309,6 +322,10 @@ class FlashForgeHttpApi(
     /** Runs a POST on [Dispatchers.IO], mapping transport/parse failures to typed exceptions. */
     private suspend fun <T> post(path: String, bodyStr: String, parse: (String) -> T): Result<T> =
         withContext(Dispatchers.IO) { postBlocking(path, bodyStr, parse) }
+
+    /** Runs a command POST under [commandMutex]: one command in flight, in FIFO order. */
+    private suspend fun <T> postCommand(path: String, bodyStr: String, parse: (String) -> T): Result<T> =
+        commandMutex.withLock { post(path, bodyStr, parse) }
 
     private fun <T> postBlocking(path: String, bodyStr: String, parse: (String) -> T): Result<T> = try {
         val request = Request.Builder().url("$baseUrl$path").post(bodyStr.toRequestBody(mediaType)).build()
