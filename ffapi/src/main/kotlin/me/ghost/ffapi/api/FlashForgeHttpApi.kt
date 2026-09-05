@@ -14,6 +14,7 @@ import me.ghost.ffapi.api.server.Commands
 import me.ghost.ffapi.api.server.Endpoints
 import me.ghost.ffapi.error.ApiErrorException
 import me.ghost.ffapi.error.AuthException
+import me.ghost.ffapi.error.FlashForgeException
 import me.ghost.ffapi.error.PrinterUnreachableException
 import me.ghost.ffapi.error.ProtocolException
 import me.ghost.ffapi.models.AD5XMaterialMapping
@@ -91,19 +92,25 @@ class FlashForgeHttpApi(
 
     // ---- Reads (credentialed) ----
 
-    /** `POST /detail`. Non-zero API code is treated as rejected credentials. */
+    /**
+     * `POST /detail`. API envelope `code 1` means rejected credentials ([AuthException]); every
+     * other non-zero code is an [ApiErrorException] carrying the firmware's own message.
+     */
     suspend fun getDetail(serialNumber: String, checkCode: String): Result<FFPrinterDetail> = post(Endpoints.DETAIL,
         json.encodeToString(CredentialsRequest(serialNumber, checkCode))) { body ->
         val w = json.decodeFromString<DetailResponse>(body)
-        if (w.code != 0) throw AuthException()
+        if (w.code != 0) throw toEnvelopeException(w.code, w.message, "detail")
         w.detail ?: throw ProtocolException("No detail in response")
     }
 
-    /** `POST /product`. Doubles as credential validation — non-zero code is rejected credentials. */
+    /**
+     * `POST /product`. Doubles as credential validation — envelope `code 1` is rejected
+     * credentials ([AuthException]); other non-zero codes are typed [ApiErrorException]s.
+     */
     suspend fun getProduct(serialNumber: String, checkCode: String): Result<Product> = postCommand(Endpoints.PRODUCT,
         json.encodeToString(CredentialsRequest(serialNumber, checkCode))) { body ->
         val w = json.decodeFromString<ProductResponse>(body)
-        if (w.code != 0) throw AuthException()
+        if (w.code != 0) throw toEnvelopeException(w.code, w.message, "product")
         w.product ?: throw ProtocolException("No product in response")
     }
 
@@ -316,8 +323,29 @@ class FlashForgeHttpApi(
 
     private fun checkOk(body: String) {
         val w = json.decodeFromString<GenericResponse>(body)
-        if (w.code != 0) throw ApiErrorException(w.code, w.message ?: "API error")
+        if (w.code != 0) throw toEnvelopeException(w.code, w.message, "API")
     }
+
+    /**
+     * Maps a non-zero API envelope code to the typed exception. Firmware-observed codes
+     * (corrected docs, 2026-09):
+     *
+     * - `1` — `"SN is different"` / `"Access code is different"`: an auth failure →
+     *   [AuthException]. (The old generic table's `3 = Unauthorized` is stale; auth is code 1.)
+     * - `-1` — `"Parameters is error"`: malformed/missing request fields.
+     * - `-2` — `"Lan mode error"`: the Creator 5 LAN-mode gate (printer not in LAN mode).
+     * - `2` — `"Printer is Busy."`, `3` — `"File does not exist."` (`/printGcode` only).
+     *
+     * Only code 1 is an [AuthException]; `-1`/`-2` and everything else stay
+     * [ApiErrorException]s with the firmware's message, so a LAN-mode or parameter error no
+     * longer masquerades as bad stored credentials.
+     */
+    private fun toEnvelopeException(code: Int, message: String?, context: String): FlashForgeException =
+        if (code == 1) {
+            AuthException(message ?: "Printer rejected credentials (serial number / check code)")
+        } else {
+            ApiErrorException(code, message ?: "$context error")
+        }
 
     /** Runs a POST on [Dispatchers.IO], mapping transport/parse failures to typed exceptions. */
     private suspend fun <T> post(path: String, bodyStr: String, parse: (String) -> T): Result<T> =
