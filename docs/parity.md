@@ -11,6 +11,11 @@ literal translation.
   credentials), `PrinterUnreachableException` (network), `NotSupportedException` (capability not
   present), `ApiErrorException(code)` (non-zero API envelope), `ProtocolException` (unparseable
   reply). Callers branch on the cause without string-matching.
+- **Auth failures are split from other envelope errors.** Per the corrected docs (2026-09), only
+  envelope `code 1` ("SN is different" / "Access code is different") is an `AuthException`;
+  `-1` ("Parameters is error") and `-2` ("Lan mode error", the Creator 5 LAN-mode gate) surface
+  as `ApiErrorException` with the firmware's own message. The TS lib does not type these at all
+  (it returns `null` and logs), so this split is a Kotlin-side improvement.
 
 ## Transport
 
@@ -31,6 +36,21 @@ literal translation.
   printer telemetry needs nothing near double precision. Conceptually-integer fields like `printLayer`
   / `nozzleCnt` stay `Float?` too (firmware has been observed appending `.0` to whole values). Only
   `pid` is `Int?`. (`FFMachineInfo` + `Temperature` are likewise `Float`.)
+- **`FFPrinterDetail.pid` deserializes leniently** (`LenientPidSerializer`): the authoritative docs
+  describe the wire value as a hex-encoded string (`"0023"` = 0x23 = 35 = 5M) while some transports
+  send a plain JSON number (`35`). A JSON number parses as an int; a string is stripped of leading
+  zeros and parsed as hex. The TS lib models `pid: number` only — this is a docs-driven hardening,
+  not a TS divergence to mirror.
+- **`FFMachineInfo.completionTimeMillis` is `Long?`** and null unless the print is advancing
+  (`MachineState.Printing`) — mirrors the TS `CompletionTime: Date | null` gate. Outside Printing
+  the firmware freezes `estimatedTime` while the wall clock moves, so any derived timestamp drifts;
+  `printEta` (the remaining duration) stays populated. **Breaking for consumers** that assumed
+  non-null (the current app reads no `completionTime`).
+- **Temperature sentinels are normalized in `MachineInfo.fromDetail`** (values `<= -50`, e.g. the
+  `-108` a chamber-less Creator 5 reports, read as absent) and `FFMachineInfo.hasChamberSensor` is
+  derived from a real chamber reading. The TS lib passes sentinels through; this mirrors the py
+  client (`TEMP_SENTINEL_FLOOR` / `has_chamber_sensor`) instead. `FFPrinterDetail` keeps the raw
+  firmware values.
 - **`PrintStatus.getPrintPercent()` returns `Int?` (null)** when layer total is 0, instead of the TS
   `NaN`.
 - Property names are idiomatic Kotlin (`typeName`, `isAD5X`, …) vs the TS PascalCase.
@@ -53,6 +73,16 @@ literal translation.
 - `getThumbnail()` returns the PNG `ByteArray?` directly (TS returned a `ThumbnailInfo` wrapper). The
   `ThumbnailInfo` parser is retained for the TCP string-response path; the TS `saveToFile` (Node
   `fs`) is dropped — Android consumers handle the bytes.
+
+## Material-station palettes
+
+Both the AD5X and the Creator 5 series render a slot color icon only on a byte-for-byte,
+  case-sensitive match against their own 24-entry firmware palette, sent as uppercase `#RRGGBB`
+ *with* the leading `#`. The palettes differ (Blue is `#45A8F9` on the AD5X, `#4CAAF8` on the
+ Creator 5), and the CIEDE2000 nearest-color snap is shared: `PaletteSnap` mirrors the TS
+ `paletteSnap.ts`, with `Ad5xPalette` / `Creator5Palette` delegating to it exactly as
+ `ad5xPalette.ts` / `creator5Palette.ts` do. The palette entry type is the shared
+ `PaletteSnap.PaletteColor` (the TS `PaletteColor` interface).
 
 ## Creator 5 family
 
