@@ -18,6 +18,8 @@ import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.net.BindException
+import java.net.InetSocketAddress
 import java.net.Socket
 import java.net.SocketTimeoutException
 
@@ -56,6 +58,14 @@ class FlashForgeTcpClient(
         const val RESPONSE_POLL_MS = 40L
         /** Idle gap before a sentinel-less reply (legacy `~M115` / `~M119`) is considered complete. */
         const val RESPONSE_SETTLE_MS = 300L
+
+        /**
+         * Bounded connect timeout for every socket this client opens, consistent with the 10 s
+         * read timeout. The two-argument `Socket(address, port)` constructor connects with NO
+         * timeout — on an unreachable host the OS SYN retries can hold the calling coroutine for
+         * minutes before failing.
+         */
+        const val CONNECT_TIMEOUT_MS = 10_000
     }
 
     /** Controls keep-alive behaviour. Change before calling [connect]. */
@@ -158,7 +168,7 @@ class FlashForgeTcpClient(
 
         connectionJob = scope.launch(Dispatchers.IO) {
             try {
-                socket = Socket(ipAddress, port).apply { soTimeout = 10000 }
+                socket = openSocket(soTimeoutMs = 10_000)
                 outWriter = PrintWriter(
                     OutputStreamWriter(socket!!.getOutputStream(), Charsets.US_ASCII), true,
                 )
@@ -170,9 +180,11 @@ class FlashForgeTcpClient(
 
                 val loginResult = sendCommandWithResponse(GCodesLogin, timeoutMs = 3_000)
                 if (loginResult.isFailure) {
-                    _isConnected.value = false
-                    try { socket?.close() } catch (_: Exception) {}
-                    socket = null
+                    // The printer may still have taken the ~M601 lock even though the reply
+                    // never arrived — release before closing so a dying session cannot hold
+                    // the control lock (which would block other clients for the ~30 s idle
+                    // timeout). teardown also releases the reader/writer the old path leaked.
+                    teardown(releaseLock = true)
                     return@launch
                 }
 
@@ -185,7 +197,9 @@ class FlashForgeTcpClient(
                     }
                 }
             } catch (_: Exception) {
-                _isConnected.value = false
+                // Connect refusal/timeout or stream-setup failure: nothing holds the lock yet
+                // (teardown's release is gated on isConnected), so this is pure cleanup.
+                teardown(releaseLock = true)
             }
         }
     }
@@ -288,7 +302,7 @@ class FlashForgeTcpClient(
     suspend fun getFileList(): Result<List<String>> = withContext(Dispatchers.IO) {
         var sock: Socket? = null
         try {
-            sock = Socket(ipAddress, port).apply { soTimeout = 500 }
+            sock = openSocket(soTimeoutMs = 500)
             val out = sock.getOutputStream()
             val input = sock.getInputStream()
             out.write("~M661\r\n".toByteArray(Charsets.US_ASCII)); out.flush()
@@ -355,7 +369,7 @@ class FlashForgeTcpClient(
     suspend fun getFileThumbnail(fileName: String): Result<ByteArray?> = withContext(Dispatchers.IO) {
         var sock: Socket? = null
         try {
-            sock = Socket(ipAddress, port).apply { soTimeout = 500 }
+            sock = openSocket(soTimeoutMs = 500)
             val out = sock.getOutputStream()
             val input = sock.getInputStream()
             out.write("~M662 /data/$fileName\r\n".toByteArray(Charsets.US_ASCII)); out.flush()
@@ -416,21 +430,65 @@ class FlashForgeTcpClient(
 
     // ---- Disconnect ----
 
+    /** Serializes [teardown] so concurrent closers cannot double-close or interleave. */
+    private val teardownMutex = Mutex()
+
     fun disconnect() {
         manuallyDisconnected = true
         reconnectJob?.cancel()
         reconnectJob = null
         scope.launch(Dispatchers.IO) {
-            try { if (_isConnected.value) writeLine("~M602") } catch (_: Exception) {}
-            _isConnected.value = false
-            try { outWriter?.close() } catch (_: Exception) {}
-            try { inReader?.close() } catch (_: Exception) {}
-            try { socket?.close() } catch (_: Exception) {}
-            keepAliveJob?.cancel(); keepAliveJob = null
-            readLoopJob?.cancel(); readLoopJob = null
-            connectionJob?.cancel(); connectionJob = null
+            teardown(releaseLock = true)
+            connectionJob?.cancel()
+            connectionJob = null
         }
     }
 
+    /**
+     * Closes the socket/reader/writer and stops the read + keep-alive jobs — the single
+     * cleanup path for [disconnect], a failed [connect], and anything else that tears a
+     * session down. The fields are swapped to `null` under [teardownMutex] *before* anything
+     * is closed, so concurrent callers (a user [disconnect] racing the connect-failure path,
+     * or a second [disconnect]) find `null`s and do nothing: the release + close runs exactly
+     * once, on every exit path. When [releaseLock] is set and the session was connected, a
+     * fire-and-forget `~M602` is attempted first so the printer's control lock is not left
+     * held by a dying session.
+     */
+    private suspend fun teardown(releaseLock: Boolean) = teardownMutex.withLock {
+        if (releaseLock && _isConnected.value) {
+            try { writeLine(GCodesLogout) } catch (_: Exception) {}
+        }
+        val sock = socket
+        val out = outWriter
+        val input = inReader
+        socket = null
+        outWriter = null
+        inReader = null
+        _isConnected.value = false
+        keepAliveJob?.cancel()
+        keepAliveJob = null
+        readLoopJob?.cancel()
+        readLoopJob = null
+        try { out?.close() } catch (_: Exception) {}
+        try { input?.close() } catch (_: Exception) {}
+        try { sock?.close() } catch (_: Exception) {}
+    }
+
+    /**
+     * Opens a socket with a bounded connect timeout (see [CONNECT_TIMEOUT_MS]). Used by the
+     * command connection and the short-lived `~M661` / `~M662` sockets alike.
+     */
+    private fun openSocket(soTimeoutMs: Int): Socket {
+        // Deliberately plain statements, not `Socket().apply { connect(...) }`: the apply form
+        // was observed failing every connect with BindException("Cannot assign requested
+        // address") against a Windows loopback listener (JDK 25), while this form connects
+        // reliably. Same construction the pre-hardening `Socket(address, port)` used.
+        val socket = Socket()
+        socket.connect(InetSocketAddress(ipAddress, port), CONNECT_TIMEOUT_MS)
+        socket.soTimeout = soTimeoutMs
+        return socket
+    }
+
     private val GCodesLogin get() = "~M601 S1"
+    private val GCodesLogout get() = "~M602"
 }
