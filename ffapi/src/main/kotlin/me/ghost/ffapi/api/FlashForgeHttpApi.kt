@@ -59,21 +59,35 @@ import java.util.concurrent.TimeUnit
  * credentialed `/detail` and `/product` reads), other non-zero API codes → [ApiErrorException].
  *
  * A single transport is shared by the control modules (DRY); the TS lib instead inlined axios in
- * each module. Cleartext HTTP only — printers do not use TLS.
+ * each module. All instances also share ONE default `OkHttpClient` (connection pool + dispatcher)
+ * unless a caller injects their own via the [httpClient] parameter — a consumer holding one
+ * transport per printer session must not churn a pool and thread set per session.
+ *
+ * Cleartext HTTP only — printers do not use TLS.
  */
 class FlashForgeHttpApi(
     private val ipAddress: String,
     port: Int = 8898,
     /** Optional OkHttp application interceptor (test seam — short-circuits the network). */
     testInterceptor: Interceptor? = null,
+    /**
+     * Optional caller-supplied [OkHttpClient] (injection seam for custom timeouts/config). When
+     * set it replaces the shared [defaultClient] entirely — its timeouts, pools and interceptors
+     * win as-is.
+     */
+    httpClient: OkHttpClient? = null,
 ) {
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(3, TimeUnit.SECONDS)
-        .readTimeout(8, TimeUnit.SECONDS)
-        .writeTimeout(5, TimeUnit.SECONDS)
-        .callTimeout(12, TimeUnit.SECONDS)
-        .apply { if (testInterceptor != null) addInterceptor(testInterceptor) }
-        .build()
+    /**
+     * The effective transport client: the injected [httpClient] when present, else the shared
+     * [defaultClient] — with [testInterceptor] (if any) layered on via [OkHttpClient.newBuilder],
+     * which keeps the shared connection pool and dispatcher. Internal for tests.
+     */
+    internal val client: OkHttpClient = when {
+        httpClient != null -> httpClient
+        testInterceptor != null -> defaultClient.newBuilder().addInterceptor(testInterceptor).build()
+        else -> defaultClient
+    }
+
     private val json = Json { ignoreUnknownKeys = true; explicitNulls = false; encodeDefaults = true }
     private val baseUrl = "http://$ipAddress:$port"
     private val mediaType = "application/json; charset=utf-8".toMediaType()
@@ -89,6 +103,24 @@ class FlashForgeHttpApi(
      * for minutes. A pause or stop command must never queue behind one.
      */
     private val commandMutex = Mutex()
+
+    companion object {
+        /**
+         * The process-wide default HTTP client shared by every [FlashForgeHttpApi] that does not
+         * inject one, so a consumer holding one transport per printer session shares a single
+         * connection pool and dispatcher instead of churning one per session (idle threads expire
+         * after OkHttp's default 60 s, but per-session churn is still wasteful). Timeouts are the
+         * hardware-proven budget: connect 3 s, read 8 s, write 5 s, call 12 s. Internal for tests.
+         */
+        internal val defaultClient: OkHttpClient by lazy {
+            OkHttpClient.Builder()
+                .connectTimeout(3, TimeUnit.SECONDS)
+                .readTimeout(8, TimeUnit.SECONDS)
+                .writeTimeout(5, TimeUnit.SECONDS)
+                .callTimeout(12, TimeUnit.SECONDS)
+                .build()
+        }
+    }
 
     // ---- Reads (credentialed) ----
 
