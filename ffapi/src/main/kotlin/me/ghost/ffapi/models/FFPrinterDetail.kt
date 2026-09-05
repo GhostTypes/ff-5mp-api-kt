@@ -1,6 +1,16 @@
 package me.ghost.ffapi.models
 
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.nullable
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * Raw `/detail` response shape. Field names mirror the printer's native JSON keys (ported from the
@@ -74,6 +84,13 @@ data class FFPrinterDetail(
     val nozzleTargetTemps: List<Float>? = null,
     /** Per-tool current nozzle temps (one entry per nozzle). Creator 5 series multi-nozzle. */
     val nozzleTemps: List<Float>? = null,
+    /**
+     * Firmware model id, parsed leniently by [LenientPidSerializer]: 35=5M, 36=5M Pro, 38=AD5X,
+     * 40=Creator 5, 41=Creator 5 Pro. The authoritative docs describe the wire value as a
+     * HEX-ENCODED STRING (`"0023"` = 0x23 = 35), but some transports send a plain JSON number
+     * (`35`) — both forms deserialize to the same `Int?`.
+     */
+    @Serializable(with = LenientPidSerializer::class)
     val pid: Int? = null,
     val platTargetTemp: Float? = null,
     val platTemp: Float? = null,
@@ -93,3 +110,45 @@ data class FFPrinterDetail(
     val tvoc: Float? = null,
     val zAxisCompensation: Float? = null,
 )
+
+/**
+ * Lenient deserializer for the `/detail` `pid` field.
+ *
+ * The docs disagree with themselves about the wire type: the Key-Fields table and example show a
+ * JSON number (`36`), while the authoritative per-model pages (and every endpoint YAML) describe
+ * a HEX-ENCODED STRING (`"0023"` = 0x23 = 35 = Adventurer 5M, `"0026"` = 38 = AD5X,
+ * `"0028"`/`"0029"` = Creator 5 / 5 Pro). A plain `Int?` mis-parses the string form as decimal
+ * (`"0023"` → 23 = Guider 2), so both forms are accepted here:
+ *
+ * - JSON number (int, or a decimal literal like `35.0`) → parsed as an int.
+ * - JSON string → leading zeros stripped, then parsed as HEX (base 16).
+ *
+ * Neither the TS nor the py client handles the string form (pydantic coerces `"0023"` to decimal
+ * 23), so this is a deliberate docs-driven hardening; anything unparseable yields `null`, which
+ * sends [MachineInfo] down its name/capability fallback.
+ */
+object LenientPidSerializer : KSerializer<Int?> {
+    private val delegate = Int.serializer().nullable
+
+    override val descriptor: SerialDescriptor = delegate.descriptor
+
+    override fun serialize(encoder: Encoder, value: Int?) =
+        encoder.encodeNullableSerializableValue(delegate, value)
+
+    override fun deserialize(decoder: Decoder): Int? {
+        val input = decoder as? JsonDecoder
+            ?: return decoder.decodeNullableSerializableValue(delegate)
+        val element = input.decodeJsonElement()
+        return (element as? JsonPrimitive)?.let(::parsePidPrimitive)
+    }
+
+    /** JSON number → int; string → strip leading zeros, parse as hex. `null` otherwise. */
+    internal fun parsePidPrimitive(element: JsonPrimitive): Int? {
+        if (!element.isString) {
+            return element.intOrNull ?: element.doubleOrNull?.toInt()
+        }
+        val hex = element.content.trim().trimStart('0')
+        if (hex.isEmpty()) return 0
+        return hex.toIntOrNull(16)
+    }
+}
