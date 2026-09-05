@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-09-05
+### Fixed
+- **Share one default `OkHttpClient` across all `FlashForgeHttpApi` instances** (connection pool + dispatcher) instead of building a private client per transport — a consumer with one transport per printer session no longer churns a pool per session. Timeouts are unchanged; a new optional `httpClient` constructor parameter injects a custom client.
+
 ## [0.4.0] - 2026-09-05
 ### Fixed
 - **Serialize HTTP command submission.** The command POSTs (`/control`, `/product`, `/printGcode`) now run through a per-client FIFO mutex: commands execute one at a time in submission order, and a failed command does not block later ones. Read endpoints (`/detail`, `/gcodeList`, `/gcodeThumb`, camera) and file uploads stay off the mutex, so polling never waits behind a command and pause/stop never waits behind an upload. (Previously listed under Unreleased.)
@@ -69,7 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - UDP discovery (pure-JVM core + optional `MulticastLock`), verified against live 5M Pro and AD5X hardware
 - CLAUDE.md porting guide, README consumption guide, and `docs/parity.md`
 
-[0.4.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/b369382f79e340c65539e30343c5c72e8309b17b...HEAD
+[0.4.1]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/14a9e5edab2ba42eb0fc8e6d07348ea9ed566461...HEAD
+[0.4.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/b369382f79e340c65539e30343c5c72e8309b17b...14a9e5edab2ba42eb0fc8e6d07348ea9ed566461
 [0.3.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/6f4fd2deab6c479894bc56ee928ae24d04db2e06...b369382f79e340c65539e30343c5c72e8309b17b
 [0.2.0]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/131b442f10afa828ef8bceae6ee646453a6654c9...6f4fd2deab6c479894bc56ee928ae24d04db2e06
 [0.1.1]: https://github.com/GhostTypes/ff-5mp-api-kt/compare/02dde7f35360834304d280e3b2cab2e51604da48...131b442f10afa828ef8bceae6ee646453a6654c9
