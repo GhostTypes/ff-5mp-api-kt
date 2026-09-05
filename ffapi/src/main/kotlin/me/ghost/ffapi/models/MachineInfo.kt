@@ -50,17 +50,22 @@ class MachineInfo {
 
         // Per-tool temperatures. Creator 5 series report `nozzleTemps[]` / `nozzleTargetTemps[]`;
         // single-nozzle models don't, so fall back to a 1-element array mirroring the main extruder.
+        // Sensor-absent sentinels (see [TEMP_SENTINEL_FLOOR]) read as absent, i.e. 0.
         val toolTemps: List<Temperature> =
             if (!detail.nozzleTemps.isNullOrEmpty()) {
                 detail.nozzleTemps!!.mapIndexed { i, t ->
                     Temperature(
-                        current = if (t.isFinite() && t != 0f) t else 0f,
-                        set = detail.nozzleTargetTemps?.getOrNull(i)
-                            ?.let { if (it.isFinite() && it != 0f) it else 0f } ?: 0f,
+                        current = tempReadingOrNull(t) ?: 0f,
+                        set = detail.nozzleTargetTemps?.getOrNull(i)?.let { tempReadingOrNull(it) } ?: 0f,
                     )
                 }
             } else {
-                listOf(Temperature(current = detail.rightTemp ?: 0f, set = detail.rightTargetTemp ?: 0f))
+                listOf(
+                    Temperature(
+                        current = tempReadingOrNull(detail.rightTemp) ?: 0f,
+                        set = tempReadingOrNull(detail.rightTargetTemp) ?: 0f,
+                    ),
+                )
             }
 
         // Capability flags — presence-derived, never assumed from the model family alone.
@@ -68,6 +73,10 @@ class MachineInfo {
         val hasCamera = detail.camera == 1 || !(detail.cameraStreamUrl ?: "").isEmpty()
         val hasLidar = detail.lidar == 1
         val hasDoorSensor = isCreator5Pro
+        // The heated chamber is a Creator 5 series *option*, not a family trait: units without
+        // the sensor report the -108 sentinel, which reads as absent below. Never gate chamber
+        // entities on `isCreator5` — a chamber-less Creator 5 would show a phantom 0 °C heater.
+        val hasChamberSensor = tempReadingOrNull(detail.chamberTemp) != null
         val modelName = detail.model ?: pid?.let { PID_MODEL_NAMES[it] } ?: detail.name ?: ""
 
         // Compute the machine state BEFORE the completion timestamp. Printing is the only state
@@ -133,23 +142,24 @@ class MachineInfo {
             hasCamera = hasCamera,
             hasLidar = hasLidar,
             hasDoorSensor = hasDoorSensor,
+            hasChamberSensor = hasChamberSensor,
             nozzleSize = detail.nozzleModel ?: "",
             // The derived value, not the raw AD5X-only field — see FFMachineInfo.hasMatlStation.
             hasMatlStation = hasMaterialStation,
             matlStationInfo = detail.matlStationInfo,
             indepMatlInfo = detail.indepMatlInfo,
             printBed = Temperature(
-                current = detail.platTemp ?: 0f,
-                set = detail.platTargetTemp ?: 0f,
+                current = tempReadingOrNull(detail.platTemp) ?: 0f,
+                set = tempReadingOrNull(detail.platTargetTemp) ?: 0f,
             ),
             chamber = Temperature(
-                current = detail.chamberTemp ?: 0f,
-                set = detail.chamberTargetTemp ?: 0f,
+                current = tempReadingOrNull(detail.chamberTemp) ?: 0f,
+                set = tempReadingOrNull(detail.chamberTargetTemp) ?: 0f,
             ),
             toolTemps = toolTemps,
             extruder = Temperature(
-                current = detail.rightTemp ?: 0f,
-                set = detail.rightTargetTemp ?: 0f,
+                current = tempReadingOrNull(detail.rightTemp) ?: 0f,
+                set = tempReadingOrNull(detail.rightTargetTemp) ?: 0f,
             ),
             printDuration = detail.printDuration ?: 0f,
             printFileName = detail.printFileName ?: "",
@@ -180,6 +190,20 @@ class MachineInfo {
         val minutes = floor((valid % 3600) / 60).toInt()
         return "%02d:%02d".format(hours, minutes)
     }
+
+    /**
+     * Maps a firmware temperature sentinel to `null` ("no reading"), passing real values through.
+     *
+     * The firmware signals "this sensor does not exist" with an out-of-band negative sentinel
+     * rather than by omitting the field: `-108` on a chamber-less Creator 5 (and `-100` is our
+     * own heater-off command value, also below the floor). Anything at or below
+     * [TEMP_SENTINEL_FLOOR] is a marker, not a reading — normalizing it here means "no sensor"
+     * reads as absent everywhere downstream, instead of as a `-108 °C` temperature. Non-finite
+     * values are treated the same way, defensively. The raw [FFPrinterDetail] fields stay
+     * untouched firmware truth.
+     */
+    private fun tempReadingOrNull(t: Float?): Float? =
+        if (t != null && t.isFinite() && t > TEMP_SENTINEL_FLOOR) t else null
 
     /**
      * Maps a raw status string (case-insensitive) to [MachineState], defaulting to Unknown.
@@ -223,6 +247,14 @@ class MachineInfo {
         const val PID_AD5X = 38
         const val PID_CREATOR_5 = 40
         const val PID_CREATOR_5_PRO = 41
+
+        /**
+         * Temperatures at or below this are firmware "no sensor" sentinels, not readings
+         * (e.g. `-108` for a chamber-less Creator 5). Normalized to `null` by
+         * [tempReadingOrNull] when building [FFMachineInfo]. Ported from the py client's
+         * `TEMP_SENTINEL_FLOOR`.
+         */
+        const val TEMP_SENTINEL_FLOOR = -50f
         private val KNOWN_HTTP_PIDS =
             setOf(PID_5M, PID_5M_PRO, PID_AD5X, PID_CREATOR_5, PID_CREATOR_5_PRO)
 

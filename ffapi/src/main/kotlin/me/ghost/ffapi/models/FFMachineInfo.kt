@@ -55,9 +55,21 @@ data class FFMachineInfo(
     val hasLidar: Boolean,
     /** Whether the printer has a real door sensor (only Creator 5 Pro; elsewhere [doorOpen] is cosmetic). */
     val hasDoorSensor: Boolean,
+    /**
+     * Whether the printer actually reported a chamber temperature. The heated chamber is a
+     * Creator 5 series *option*, not a family trait: units without the sensor report the `-108`
+     * firmware sentinel, which [MachineInfo.fromDetail] normalizes to absent. Gate chamber
+     * entities on this, never on `isCreator5` — that is what left chamber-less units with a
+     * phantom chamber reading. Ported from the py client's `has_chamber_sensor`.
+     */
+    val hasChamberSensor: Boolean,
     val nozzleSize: String,
     val printBed: Temperature,
-    /** Heated-chamber temps (Creator 5 series; 0/0 on models without one). */
+    /**
+     * Heated-chamber temps (Creator 5 series option). `0/0` when the printer has no chamber
+     * sensor — the firmware reports that case as a `-108` sentinel, which [MachineInfo.fromDetail]
+     * normalizes to absent; see [hasChamberSensor].
+     */
     val chamber: Temperature,
     /** Per-tool temps — one entry per nozzle; single-nozzle models mirror [extruder]. */
     val toolTemps: List<Temperature>,

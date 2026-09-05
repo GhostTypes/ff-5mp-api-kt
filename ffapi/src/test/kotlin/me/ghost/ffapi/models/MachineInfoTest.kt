@@ -377,4 +377,79 @@ class MachineInfoTest {
             assertEquals("01:00", r.printEta)
         }
     }
+
+    // ---- Temperature-sentinel normalization + hasChamberSensor (ported from the py suite) ----
+
+    // The firmware reports "this sensor does not exist" with an out-of-band negative sentinel
+    // (-108 on a chamber-less Creator 5) instead of omitting the field. It must read as absent,
+    // never as a -108 °C temperature.
+    @Test
+    fun `normalizes a chamberless Creator 5 sentinel to absent`() {
+        val detail = creator5Detail().copy(chamberTemp = -108f, chamberTargetTemp = -108f)
+
+        val r = converter.fromDetail(detail)!!
+
+        assertFalse(r.hasChamberSensor)
+        assertEquals(0f, r.chamber.current, 1e-6f)
+        assertEquals(0f, r.chamber.set, 1e-6f)
+    }
+
+    @Test
+    fun `a real chamber reading is untouched and the sensor flag follows it`() {
+        val r = converter.fromDetail(creator5Detail())!! // chamberTemp = 45, target = 50
+
+        assertTrue(r.hasChamberSensor)
+        assertEquals(45f, r.chamber.current, 1e-6f)
+        assertEquals(50f, r.chamber.set, 1e-6f)
+    }
+
+    @Test
+    fun `treats every value at or below the sentinel floor as absent`() {
+        for (t in listOf(-100f, -108f, -273f, MachineInfo.TEMP_SENTINEL_FLOOR)) {
+            val r = converter.fromDetail(creator5Detail().copy(chamberTemp = t))!!
+            assertFalse("chamberTemp $t must read as absent", r.hasChamberSensor)
+            assertEquals(0f, r.chamber.current, 1e-6f)
+        }
+    }
+
+    @Test
+    fun `a value just above the floor is still a reading`() {
+        val r = converter.fromDetail(creator5Detail().copy(chamberTemp = -49f))!!
+        assertTrue(r.hasChamberSensor)
+        assertEquals(-49f, r.chamber.current, 1e-6f)
+    }
+
+    // Only the chamber sentinel is confirmed in the wild, but the same normalization is
+    // applied defensively to every temperature the structured model exposes.
+    @Test
+    fun `normalizes sentinels on the bed, extruder and per-tool temps too`() {
+        val r = converter.fromDetail(
+            genericDetail().copy(
+                platTemp = -50f,
+                platTargetTemp = -60f,
+                rightTemp = -100f,
+                rightTargetTemp = -100f,
+            )
+        )!!
+
+        assertEquals(0f, r.printBed.current, 1e-6f)
+        assertEquals(0f, r.printBed.set, 1e-6f)
+        assertEquals(0f, r.extruder.current, 1e-6f)
+        assertEquals(0f, r.extruder.set, 1e-6f)
+        assertEquals(0f, r.toolTemps[0].current, 1e-6f)
+
+        val tools = converter.fromDetail(
+            creator5Detail().copy(nozzleTemps = listOf(200f, -108f), nozzleTargetTemps = listOf(210f, -108f))
+        )!!
+        assertEquals(200f, tools.toolTemps[0].current, 1e-6f)
+        assertEquals(0f, tools.toolTemps[1].current, 1e-6f)
+        assertEquals(0f, tools.toolTemps[1].set, 1e-6f)
+    }
+
+    @Test
+    fun `hasChamberSensor is false when the printer omits the field entirely`() {
+        val r = converter.fromDetail(genericDetail())!! // no chamberTemp at all
+        assertFalse(r.hasChamberSensor)
+        assertEquals(0f, r.chamber.current, 1e-6f)
+    }
 }
