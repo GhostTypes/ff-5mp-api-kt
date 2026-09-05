@@ -11,11 +11,14 @@ asks. Commit at logical checkpoints to keep history organized, and push whenever
 ## What this is
 
 A **Kotlin/JVM (Android-first) port of the `ff-5mp-api-ts` TypeScript library** — a clean-room
-client library for FlashForge 3D printers (Adventurer **5M / 5M Pro / AD5X**, plus legacy
-**Adventurer 3 / 4** over TCP). It speaks the FlashForge LAN wire protocol:
+client library for FlashForge 3D printers (Adventurer **5M / 5M Pro / AD5X** and **Creator 5 /
+Creator 5 Pro**, plus legacy **Adventurer 3 / 4** over TCP). It speaks the FlashForge LAN wire
+protocol:
 
-- **HTTP REST** on port **8898** (modern 5M/5M Pro/AD5X)
-- **TCP G-code/M-code** on port **8899** (all models; control-only for modern, full polling for legacy)
+- **HTTP REST** on port **8898** (modern 5M/5M Pro/AD5X; **Creator 5 / Creator 5 Pro are
+  HTTP-only** — they have no usable legacy TCP/8899 control channel)
+- **TCP G-code/M-code** on port **8899** (5M family + legacy; control-only for 5M, full polling
+  for legacy). The Creator 5 family must not use this path.
 - **MJPEG camera** on port **8080**
 - **UDP discovery** (broadcast/multicast)
 - Per-request auth via `serialNumber` + `checkCode` on the HTTP path
@@ -60,8 +63,9 @@ The TypeScript library we are porting **1:1**. Mirror its architecture and publi
 - `src/models/ff-models.ts` — raw API shapes incl. AD5X IFS types (`MatlStationInfo`, `SlotInfo`,
   `AD5XMaterialMapping`, `AD5X*JobParams`, etc.)
 - `src/models/MachineInfo.ts` — `MachineInfo.fromDetail()`: transforms raw `FFPrinterDetail` into
-  the structured `FFMachineInfo`. **Pid-first model detection** (35=5M, 36=5M Pro, 38=AD5X via
-  `KNOWN_HTTP_PIDS`); do NOT substring-match user-mutable `detail.name`.
+  the structured `FFMachineInfo`. **Pid-first model detection** (35=5M, 36=5M Pro, 38=AD5X,
+  40=Creator 5, 41=Creator 5 Pro via `KNOWN_HTTP_PIDS`); do NOT substring-match user-mutable
+  `detail.name`.
 - `src/tcpapi/` — `FlashForgeTcpClient.ts` (low-level socket + keep-alive), `FlashForgeClient.ts`
   (generic legacy), `FlashForgeA3Client.ts` / `FlashForgeA4Client.ts` (documented legacy clients),
   `client/GCodes.ts` (G-code definitions), `client/GCodeController.ts` / `A3GCodeController.ts`,
@@ -137,24 +141,46 @@ These are verified against live hardware (an AD5X on firmware 3.1.0) and the
   cross the boundary with no conversion. Don't reintroduce `Double` — see `docs/parity.md`.)
 - **`/detail` is the single source of truth for modern printers** (status + IFS inline). TCP is
   control-only for modern (custom LEDs `~M146`, homing `~G28`). Only the legacy backend polls over TCP.
-- **Model detection is pid-based** (35=5M, 36=5M Pro, 38=AD5X) on first `/detail`; legacy printers
-  fall back to TCP `~M115` `Machine Type:` string. Never substring-match the user-mutable name.
+- **Model detection is pid-based** (35=5M, 36=5M Pro, 38=AD5X, 40=Creator 5, 41=Creator 5 Pro) on
+  first `/detail`; legacy printers fall back to TCP `~M115` `Machine Type:` string. Never
+  substring-match the user-mutable name.
 - **Networking on IO dispatcher**; socket reads use `soTimeout = 10000`. Release the TCP lock
   (`~M602`) and close socket/reader/writer in teardown.
-- **Temperature SET over HTTP is suspect.** The TS lib sets temps over TCP G-code (M104/M140) and
-  leaves the HTTP `temperatureCtl_cmd` path commented out as unverified. Prefer the TCP path.
+- **Temperature SET transport differs by family.** For 5M/5M Pro/AD5X, set temps over TCP G-code
+  (M104/M140) — the HTTP `temperatureCtl_cmd` path is unverified for them, so prefer TCP. For the
+  **Creator 5 family (HTTP-only)** there is no TCP path: use the verified HTTP
+  `temperatureCtl_cmd` with the per-tool `nozzles[]` array (exactly 4 entries; use `0`, **not**
+  `-100`, to turn a tool off — firmware ignores `-100` inside `nozzles[]`).
 - **Legacy specifics** (emulator-verified): M119 (status/LED/current file), M105 (temps), M27
   (progress); job control M25/M24/M26; start M23+M24; file list M661 (A4 `::`-delimited vs A3
   `info_list.size:`); thumbnail M662 (A4 raw PNG vs A3 `0xa2a22a2a` magic header); LED control
   A4/Generic `~M146 r255...` (RGB) vs A3 `~M146 1/0` (on/off); A3 firmware uses `echo:`/`ack:`
   prefixes, IDLE status, `LEDStatus:`, `PrintFileName:`, fire-and-forget motion, M105 ok-prefix.
+- **Creator 5 family is HTTP-only.** It exposes no usable legacy TCP/8899 control channel, so
+  `Creator5Backend` fails fast (`NotSupportedException`) on TCP-only ops (`home()`, file listing)
+  rather than hanging on a dead socket. Capability baselines: `hasMaterialStation=true`,
+  `chamberTempControl=true` (heated chamber, firmware-capped at 80 °C); filtration control is
+  forced on for the **Pro** only.
+- **Creator 5 slot colors use a fixed 24-entry firmware palette.** The firmware renders a slot
+  icon only on a byte-for-byte, case-sensitive match against this palette (unlike AD5X's freeform
+  colors). Snap incoming colors via `Creator5Palette` using CIEDE2000 nearest-color in CIE L\*a\*b\*
+  space; keep the `#` prefix for C5 (strip it for AD5X).
+- **Creator 5 tool-changer / heated-chamber control** is model-specific: `setToolTemp(toolIndex,
+  …)`, `setToolTemps(list)`, `cancelToolTemp(i)` (4-head tool changer) plus capability-gated
+  `setChamberTemp(celsius)` / `cancelChamberTemp()`.
+- **`/product` is unreliable for capability detection.** It reports filtration/TVOC/door flags
+  correctly for the 5M Pro but returns **wrong** values for the Creator 5 Pro. Gate these
+  capabilities on the **firmware pid (model identity)**, not on `/product`-derived client flags
+  (e.g. surface filtration/TVOC/door only for `is_pro` OR `is_creator5_pro`).
 
 ## Porting approach (suggested — confirm structure before deep work)
 
-1. **Decide the Gradle/packaging shape first** (this repo is currently empty): Kotlin Multiplatform
-   vs. plain Kotlin/JVM library vs. Android library (`com.android.library`). The app is Android, but
-   keeping the core pure Kotlin/JVM (no Android framework deps where avoidable — e.g. discovery's
-   `MulticastLock` is Android-specific and may need an abstraction) maximizes reuse.
+1. **Gradle/packaging shape** — now a pure Kotlin/JVM library (module `ffapi`, coordinates
+   `me.ghost:ff-5mp-api-kt`, currently **0.2.0**). Published **via `mavenLocal()` only** (no
+   remote registry, no git tags); the consuming app pulls it with `./gradlew
+   :ffapi:publishToMavenLocal`. Keeping the core pure Kotlin/JVM (no Android framework deps where
+   avoidable — e.g. discovery's `MulticastLock` is Android-specific and may need an abstraction)
+   maximizes reuse.
 2. **Mirror the TS package layout** under `src/main/kotlin/` (or KMP `commonMain`): `client`,
    `api/controls`, `api/server`, `api/network`, `models`, `tcpapi`, `tcpapi/replays`.
 3. **Port models + parsers first** (`ff-models` → data classes, `MachineInfo.fromDetail`,
