@@ -15,9 +15,11 @@ import org.junit.Test
 
 /**
  * Wire-format tests for the model-gated `msConfig_cmd` color field. Mirrors the TS
- * `Control.configureSlot`: Creator 5 sends a snapped uppercase `#RRGGBB` (firmware renders an icon
- * only on a byte-for-byte palette match); AD5X strips the `#` for freeform hex. `slotAction`
- * (`ms_cmd`) stays AD5X-only — it is rejected on a Creator 5.
+ * `Control.configureSlot`: BOTH families send a snapped uppercase `#RRGGBB` with the leading
+ * `#` — each firmware renders an icon only on a byte-for-byte match against its own 24-entry
+ * palette, and the printer stores the raw value it is sent (a bare stripped hex poisons
+ * `slotInfos[].materialColor` on read-back; verified on real AD5X hardware).
+ * `slotAction` (`ms_cmd`) stays AD5X-only — it is rejected on a Creator 5.
  */
 class ConfigureSlotWireFormatTest {
 
@@ -55,18 +57,37 @@ class ConfigureSlotWireFormatTest {
     }
 
     @Test
-    fun `AD5X strips the hash and sends freeform RRGGBB`() = runTest {
+    fun `AD5X snaps the color to its own palette hashRRGGBB with the hash`() = runTest {
         val b = CapturingBackend(PrinterModel.AD5X)
         b.setSlotMaterial(slot = 2, materialName = "PETG", hexRgb = "#FF8800")
         val cfg = b.captured.single()
-        assertEquals("FF8800", cfg.rgb)
+        assertEquals(2, cfg.slot)
+        assertEquals("PETG", cfg.mt)
+        // Orange-ish input snaps to the AD5X palette Orange #F98D33, WITH the leading '#'.
+        assertEquals("#F98D33", cfg.rgb)
     }
 
     @Test
-    fun `AD5X leaves an already-bare hex unchanged`() = runTest {
+    fun `AD5X snaps pure red to its palette Red F72224`() = runTest {
         val b = CapturingBackend(PrinterModel.AD5X)
-        b.setSlotMaterial(slot = 3, materialName = "PLA", hexRgb = "12ABCD")
-        assertEquals("12ABCD", b.captured.single().rgb)
+        b.setSlotMaterial(slot = 1, materialName = "PLA", hexRgb = "#FF0000")
+        assertEquals("#F72224", b.captured.single().rgb)
+    }
+
+    @Test
+    fun `AD5X re-prefixes a bare hex read back from a slot`() = runTest {
+        // slotInfos[].materialColor can arrive without the '#'; the wire value must carry it.
+        val b = CapturingBackend(PrinterModel.AD5X)
+        b.setSlotMaterial(slot = 3, materialName = "PLA", hexRgb = "161616")
+        assertEquals("#161616", b.captured.single().rgb)
+    }
+
+    @Test
+    fun `AD5X exact palette entry passes through in uppercase`() = runTest {
+        val b = CapturingBackend(PrinterModel.AD5X)
+        b.setSlotMaterial(slot = 4, materialName = "PLA", hexRgb = "45a8f9")
+        // Case-insensitive input still snaps to the exact uppercase palette entry.
+        assertEquals("#45A8F9", b.captured.single().rgb)
     }
 
     @Test

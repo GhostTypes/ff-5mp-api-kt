@@ -1,5 +1,6 @@
 package me.ghost.ffapi.api.controls.creator5
 
+import me.ghost.ffapi.api.controls.PaletteSnap.PaletteColor
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -20,7 +21,7 @@ class Creator5PaletteTest {
             assertEquals(c.hex, c.hex.uppercase())
         }
         assertEquals(
-            Creator5Palette.Color(0, "White", "#FFFFFF"),
+            PaletteColor(0, "White", "#FFFFFF"),
             Creator5Palette.CREATOR5_PALETTE[0],
         )
     }

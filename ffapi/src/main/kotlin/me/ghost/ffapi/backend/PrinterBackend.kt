@@ -4,6 +4,7 @@ import me.ghost.ffapi.PrinterCapabilities
 import me.ghost.ffapi.PrinterConfig
 import me.ghost.ffapi.PrinterModel
 import me.ghost.ffapi.api.FlashForgeHttpApi
+import me.ghost.ffapi.api.controls.ad5x.Ad5xPalette
 import me.ghost.ffapi.api.controls.creator5.Creator5Palette
 import me.ghost.ffapi.api.controls.TempControl
 import me.ghost.ffapi.error.NotSupportedException
@@ -277,12 +278,14 @@ abstract class PrinterBackend(
      * Configures material name + color metadata for a material-station slot (no filament motion).
      * Capability-gated to models with a material station (AD5X + Creator 5 series).
      *
-     * The `msConfig_cmd` handler is present on both, but they render the slot color icon with
-     * mutually exclusive wire formats:
-     *  - AD5X: accepts freeform hex; the leading `#` is stripped before sending (`RRGGBB`).
-     *  - Creator 5 / 5 Pro: renders an icon ONLY on a byte-for-byte, case-sensitive match against
-     *    the firmware's 24-entry palette (WITH the `#`); any other value falls back to White. The
-     *    caller's color is snapped to the nearest palette entry in uppercase `#RRGGBB`.
+     * The `msConfig_cmd` handler is present on both, and both render the slot color icon ONLY
+     * on a byte-for-byte, case-sensitive match against their own 24-entry firmware palette,
+     * sent as uppercase `#RRGGBB` — the `#` is part of the wire value on the AD5X too. The
+     * palettes differ (Blue is `#45A8F9` on the AD5X vs `#4CAAF8` on the Creator 5), so only
+     * the list changes: the caller's color is snapped to the nearest entry in the correct
+     * palette automatically (see `Ad5xPalette` / `Creator5Palette`). A non-match would leave
+     * the slot without an icon — and the printer stores what it is sent, so a snapped value
+     * also keeps `slotInfos[].materialColor` clean on read-back.
      */
     open suspend fun setSlotMaterial(slot: Int, materialName: String, hexRgb: String): Result<Unit> {
         if (!capabilities.hasMaterialStation) {
@@ -291,7 +294,7 @@ abstract class PrinterBackend(
         val rgb = if (model.isCreator5) {
             Creator5Palette.snapToCreator5Palette(hexRgb).hex
         } else {
-            hexRgb.removePrefix("#")
+            Ad5xPalette.snapToAd5xPalette(hexRgb).hex
         }
         return sendConfigureSlot(slot, materialName, rgb)
     }

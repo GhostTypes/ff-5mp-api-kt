@@ -161,10 +161,12 @@ These are verified against live hardware (an AD5X on firmware 3.1.0) and the
   rather than hanging on a dead socket. Capability baselines: `hasMaterialStation=true`,
   `chamberTempControl=true` (heated chamber, firmware-capped at 80 °C); filtration control is
   forced on for the **Pro** only.
-- **Creator 5 slot colors use a fixed 24-entry firmware palette.** The firmware renders a slot
-  icon only on a byte-for-byte, case-sensitive match against this palette (unlike AD5X's freeform
-  colors). Snap incoming colors via `Creator5Palette` using CIEDE2000 nearest-color in CIE L\*a\*b\*
-  space; keep the `#` prefix for C5 (strip it for AD5X).
+- **Both slot-color wire formats use a fixed 24-entry firmware palette.** The AD5X and the
+  Creator 5 series each render a slot icon only on a byte-for-byte, case-sensitive match against
+  their OWN 24-entry palette (they differ: Blue is `#45A8F9` on the AD5X, `#4CAAF8` on the C5), sent
+  as uppercase `#RRGGBB` WITH the leading `#` on both. Snap incoming colors via
+  `Ad5xPalette` / `Creator5Palette` (CIEDE2000 nearest-color in CIE L\*a\*b\* space, shared machinery
+  in `PaletteSnap`).
 - **Creator 5 tool-changer / heated-chamber control** is model-specific: `setToolTemp(toolIndex,
   …)`, `setToolTemps(list)`, `cancelToolTemp(i)` (4-head tool changer) plus capability-gated
   `setChamberTemp(celsius)` / `cancelChamberTemp()`.
