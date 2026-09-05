@@ -290,4 +290,91 @@ class MachineInfoTest {
         val r = converter.fromDetail(creator5Detail(name = "MyC5", model = null))!!
         assertEquals("Creator 5", r.model)
     }
+
+    // ---- Status-string mapping (ported from the TS `getMachineState` suite) ----
+
+    private fun expectState(status: String, expected: MachineState) {
+        val r = converter.fromDetail(genericDetail().copy(status = status))
+        assertEquals(expected, r!!.machineState)
+    }
+
+    @Test
+    fun `maps the documented status strings`() {
+        expectState("ready", MachineState.Ready)
+        expectState("busy", MachineState.Busy)
+        expectState("calibrate_doing", MachineState.Calibrating)
+        expectState("error", MachineState.Error)
+        expectState("heating", MachineState.Heating)
+        expectState("printing", MachineState.Printing)
+        expectState("pausing", MachineState.Pausing)
+        expectState("paused", MachineState.Paused)
+        expectState("cancel", MachineState.Cancelled)
+        expectState("completed", MachineState.Completed)
+    }
+
+    // The Creator 5 Pro sends "pause", not the documented "paused", exactly when it pauses
+    // itself on a detected clog — so the state read Unknown at the moment the user most needed
+    // to know why the print stopped. Observed on pid 41, firmware 1.9.4. Ported from the
+    // TS/py fix.
+    @Test
+    fun `maps the undocumented pause the Creator 5 Pro actually sends`() {
+        expectState("pause", MachineState.Paused)
+    }
+
+    // Sent while a file is transferring to the printer. Mapped onto the existing Busy rather
+    // than a new enum member: consumers may pin this enum to a fixed list, so adding a member
+    // is breaking for them while reusing one is not.
+    @Test
+    fun `maps downloading onto Busy`() {
+        expectState("downloading", MachineState.Busy)
+    }
+
+    @Test
+    fun `falls back to Unknown for genuinely unrecognized statuses`() {
+        expectState("flurbling", MachineState.Unknown)
+        expectState("", MachineState.Unknown)
+    }
+
+    @Test
+    fun `status mapping is case-insensitive`() {
+        expectState("Pause", MachineState.Paused)
+        expectState("PRINTING", MachineState.Printing)
+    }
+
+    // ---- CompletionTime gate (ported from the TS `CompletionTime` suite) ----
+
+    // Printing is the only state the firmware counts `estimatedTime` down in, so it is the
+    // only state where `now + estimatedTime` stays put across polls.
+    @Test
+    fun `derives a completion timestamp while the print is advancing`() {
+        val before = System.currentTimeMillis()
+        val r = converter.fromDetail(
+            genericDetail().copy(status = "printing", estimatedTime = 3600f)
+        )!!
+        val after = System.currentTimeMillis()
+
+        assertNotNull(r.completionTimeMillis)
+        assertTrue(r.completionTimeMillis!! >= before + 3_590_000L)
+        assertTrue(r.completionTimeMillis!! <= after + 3_610_000L)
+        assertEquals("01:00", r.printEta)
+    }
+
+    // The firmware stops counting `estimatedTime` down whenever the print is not progressing.
+    // Deriving `now + estimatedTime` on every poll would then walk the completion time forward
+    // one minute per minute — a paused print would appear to recede forever. `printEta` stays
+    // populated because the remaining *duration* is still correct; only the absolute
+    // timestamp is not.
+    //
+    // 'heating' belongs here, not above: the pre-print warmup does not advance the job either,
+    // so it drifts the same way, just for minutes not hours.
+    @Test
+    fun `returns null completion time when the print is not advancing`() {
+        for (status in listOf("paused", "pause", "pausing", "heating", "ready", "error", "completed")) {
+            val r = converter.fromDetail(
+                genericDetail().copy(status = status, estimatedTime = 3600f)
+            )
+            assertNull(status, r!!.completionTimeMillis)
+            assertEquals("01:00", r.printEta)
+        }
+    }
 }

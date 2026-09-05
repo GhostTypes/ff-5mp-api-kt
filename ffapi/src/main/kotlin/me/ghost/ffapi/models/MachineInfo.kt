@@ -70,10 +70,24 @@ class MachineInfo {
         val hasDoorSensor = isCreator5Pro
         val modelName = detail.model ?: pid?.let { PID_MODEL_NAMES[it] } ?: detail.name ?: ""
 
+        // Compute the machine state BEFORE the completion timestamp. Printing is the only state
+        // in which the firmware actually counts `estimatedTime` down; outside it the field freezes
+        // at its last value while the wall clock keeps moving, so `now + estimatedTime` recomputed
+        // on every poll walks forward one minute per minute — a paused print appears to recede
+        // forever. The remaining *duration* ([printEta]) stays correct throughout; only its
+        // conversion to an absolute timestamp is invalid. Heating is deliberately excluded too:
+        // the pre-print warmup does not advance the job either, it just lasts minutes not hours.
+        val machineState = getMachineState(detail.status ?: "")
+
         val estimatedTime = detail.estimatedTime ?: 0f
         val printProgress = detail.printProgress ?: 0f
         val printEta = formatTimeFromSeconds(estimatedTime)
-        val completionTimeMillis = System.currentTimeMillis() + (estimatedTime * 1000).toLong()
+        val completionTimeMillis: Long? =
+            if (machineState == MachineState.Printing) {
+                System.currentTimeMillis() + (estimatedTime * 1000).toLong()
+            } else {
+                null
+            }
         val formattedRunTime = formatTimeFromSeconds(detail.printDuration ?: 0f)
 
         val totalMinutes = (detail.cumulativePrintTime ?: 0f).toLong()
@@ -145,7 +159,7 @@ class MachineInfo {
             printProgressInt = floor(printProgress * 100).toInt(),
             printSpeedAdjust = detail.printSpeedAdjust ?: 0f,
             filamentType = detail.rightFilamentType ?: "",
-            machineState = getMachineState(detail.status ?: ""),
+            machineState = machineState,
             status = detail.status ?: "",
             totalPrintLayers = (detail.targetPrintLayer ?: 0f).toInt(),
             tvoc = detail.tvoc ?: 0f,
@@ -167,7 +181,18 @@ class MachineInfo {
         return "%02d:%02d".format(hours, minutes)
     }
 
-    /** Maps a raw status string (case-insensitive) to [MachineState], defaulting to Unknown. */
+    /**
+     * Maps a raw status string (case-insensitive) to [MachineState], defaulting to Unknown.
+     *
+     * An unmapped value costs the consumer everything the field is for: it becomes Unknown,
+     * which surfaces as a blank state at the moment the user most needs to know what the
+     * printer is doing. Both `pause` and `downloading` below were found exactly that way.
+     *
+     * Consumers may map this enum onto a fixed set of values, so a *new* member is a breaking
+     * change for them while mapping onto an existing one is not — prefer the closest existing
+     * state. The fw-5.x-only strings (`cloud_slicing` / `sending` / `unzipping`) therefore stay
+     * Unknown here, matching the TS reference, whose switch ends at the cases below.
+     */
     private fun getMachineState(status: String): MachineState = when (status.lowercase()) {
         "ready" -> MachineState.Ready
         "busy" -> MachineState.Busy
@@ -176,9 +201,18 @@ class MachineInfo {
         "heating" -> MachineState.Heating
         "printing" -> MachineState.Printing
         "pausing" -> MachineState.Pausing
+        // The Creator 5 Pro reports "pause" for a paused print where the documented value is
+        // "paused" — both are mapped, because firmware that reports one is not a reason to drop
+        // the other. Observed on pid 41, firmware 1.9.4, whenever the printer paused itself on
+        // a detected clog.
+        "pause" -> MachineState.Paused
         "paused" -> MachineState.Paused
         "cancel" -> MachineState.Cancelled
         "completed" -> MachineState.Completed
+        // Reported while a file is being transferred to the printer. Not a print, but not idle
+        // either, so Busy is the honest existing fit; a dedicated state would need consumers to
+        // add it to their option lists first.
+        "downloading" -> MachineState.Busy
         else -> MachineState.Unknown
     }
 

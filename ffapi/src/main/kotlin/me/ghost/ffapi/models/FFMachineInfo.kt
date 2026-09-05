@@ -78,8 +78,15 @@ data class FFMachineInfo(
     val flashCloudRegisterCode: String,
     val polarCloudRegisterCode: String,
     val printEta: String,
-    /** Estimated completion time as epoch milliseconds (TS used a `Date`). */
-    val completionTimeMillis: Long,
+    /**
+     * Estimated completion time as epoch milliseconds, or null when the print is not advancing
+     * (TS: `CompletionTime: Date | null`). The firmware only counts `estimatedTime` down while
+     * `status == "printing"`; outside it the field freezes while the wall clock keeps moving, so
+     * a timestamp derived on every poll would walk forward one minute per minute. Null therefore
+     * means "no valid ETA", never "no ETA known" — [printEta], the remaining *duration*, stays
+     * populated in every state.
+     */
+    val completionTimeMillis: Long?,
     val formattedRunTime: String,
     val formattedTotalRunTime: String,
     /**
