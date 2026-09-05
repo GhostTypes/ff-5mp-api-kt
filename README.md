@@ -39,7 +39,7 @@ Not yet ported (see parity.md): `FiveMClient` module split, A3/A4 subclasses, ca
 Build and install to the local Maven repo:
 
 ```bash
-./gradlew :ffapi:publishToMavenLocal   # publishes me.ghost:ff-5mp-api-kt:0.3.0
+./gradlew :ffapi:publishToMavenLocal   # publishes me.ghost:ff-5mp-api-kt:0.4.0
 ```
 
 In the app, add `mavenLocal()` to the repositories and depend on it:
@@ -49,7 +49,7 @@ In the app, add `mavenLocal()` to the repositories and depend on it:
 mavenLocal()
 
 // app/build.gradle.kts
-implementation("me.ghost:ff-5mp-api-kt:0.3.0")
+implementation("me.ghost:ff-5mp-api-kt:0.4.0")
 ```
 
 Then construct a `FlashForgeHttpApi` + `FlashForgeClient`, resolve the model via
