@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+### Added
+- **`FlashForgeHttpApi.uploadFileCreator5(materialMappings = ...)`.** The Creator 5 firmware reads a base64 `materialMappings` upload header, the same format as the AD5X, and applies it when the upload starts the print (confirmed by firmware analysis of 1.9.6 and 1.9.8, Creator 5 and Creator 5 Pro). The header is sent only when `startPrint` is true: the firmware keeps upload mappings in memory until the next print ends, so they would apply to a later, unrelated print. The recommended flow is unchanged: upload without starting, then call `startCreator5Job` with the mappings.
+
+### Changed
+- **Creator 5 documentation corrected.** The firmware only logs `useMatlStation` and `gcodeToolCnt` on upload. `/printGcode` applies mappings to any file on the printer, not only the last upload. Without mappings, each tool prints from the slot with the slicer's filament number (filament 1 prints from slot 1), whatever is loaded there, so pass a mapping for every tool, including a single-tool print. Mappings take effect only for a `.3mf` file.
+
 ## [0.4.1] - 2026-09-05
 ### Fixed
 - **Share one default `OkHttpClient` across all `FlashForgeHttpApi` instances** (connection pool + dispatcher) instead of building a private client per transport — a consumer with one transport per printer session no longer churns a pool per session. Timeouts are unchanged; a new optional `httpClient` constructor parameter injects a custom client.

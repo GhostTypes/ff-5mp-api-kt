@@ -265,9 +265,15 @@ class FlashForgeHttpApi(
 
     /**
      * Creator 5 / Creator 5 Pro file upload (`POST /uploadGcode`). Same multipart shape as the
-     * AD5X but with NO `firstLayerInspection` header (the field doesn't exist on the C5) and NO
-     * `materialMappings` header (the C5 maps materials at print-start via [printGcodeCreator5],
-     * not at upload). Booleans are serialized as the string "true"/"false".
+     * AD5X but with NO `firstLayerInspection` header (the field doesn't exist on the C5).
+     * Booleans are serialized as the string "true"/"false".
+     *
+     * Recommended flow: upload with [startPrint] false, then start with [printGcodeCreator5] and a
+     * mapping for every tool. The firmware also reads a base64 `materialMappings` header, like
+     * the AD5X, and applies it when the upload starts the print. [materialMappings] is sent only
+     * when [startPrint] is true: the firmware keeps upload mappings in memory until the next print
+     * ends, so mappings on an upload that does not start would apply to a later, unrelated print.
+     * The firmware only logs [useMatlStation] and [gcodeToolCnt].
      */
     suspend fun uploadFileCreator5(
         serialNumber: String,
@@ -280,6 +286,7 @@ class FlashForgeHttpApi(
         timeLapseVideo: Boolean = false,
         useMatlStation: Boolean = false,
         gcodeToolCnt: Int = 1,
+        materialMappings: List<AD5XMaterialMapping> = emptyList(),
     ): Result<Unit> = uploadMultipart(
         serialNumber, checkCode, fileName, fileBytes,
         buildMap {
@@ -289,6 +296,9 @@ class FlashForgeHttpApi(
             put("timeLapseVideo", timeLapseVideo.toString())
             put("useMatlStation", useMatlStation.toString())
             put("gcodeToolCnt", gcodeToolCnt.toString())
+            if (startPrint && materialMappings.isNotEmpty()) {
+                put("materialMappings", encodeMaterialMappingsBase64(materialMappings))
+            }
         },
     )
 

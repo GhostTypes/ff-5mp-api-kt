@@ -51,12 +51,13 @@ class Creator5Backend(
     /**
      * Starts a local print on the Creator 5 via `POST /printGcode` with the C5-native body.
      *
-     * The Creator 5 splits its material-station workflow across two requests (unlike the AD5X,
-     * which maps materials at upload): the file is uploaded first, then THIS command carries the
-     * per-tool [materialMappings] at print-start. The body omits `useMatlStation` / `gcodeToolCnt`
-     * (those live on the upload) and `firstLayerInspection` (doesn't exist on the C5);
-     * `flowCalibration` / `timeLapseVideo` are always present. Omit [materialMappings] (or pass an
-     * empty list) for a single-tool print.
+     * The file must already be on the printer; it can be a file uploaded long before, not only
+     * the last upload. The body omits `useMatlStation` / `gcodeToolCnt` and `firstLayerInspection`
+     * (doesn't exist on the C5); `flowCalibration` / `timeLapseVideo` are always present.
+     *
+     * Pass a mapping for every tool, including a single-tool print. Without mappings the firmware
+     * prints each tool from the slot with the slicer's filament number (filament 1 -> slot 1),
+     * whatever is loaded there. Mappings take effect only for a .3mf file.
      */
     suspend fun startCreator5Job(
         fileName: String,

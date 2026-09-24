@@ -178,7 +178,7 @@ class JobControlWireFormatTest {
     // ---- uploadFileCreator5 headers ----
 
     @Test
-    fun `Creator 5 upload omits firstLayerInspection and materialMappings headers`() = runTest {
+    fun `Creator 5 upload omits firstLayerInspection and, without mappings, materialMappings`() = runTest {
         val (api, requests) = capturingApi()
 
         api.uploadFileCreator5(
@@ -196,10 +196,49 @@ class JobControlWireFormatTest {
         assertEquals("true", req.header("flowCalibration")) // booleans as the string "true"/"false"
         assertEquals("true", req.header("useMatlStation"))
         assertEquals("2", req.header("gcodeToolCnt"))
-        // NO firstLayerInspection (absent on the C5); NO materialMappings (C5 maps at print-start).
+        // NO firstLayerInspection (absent on the C5); no mappings were given.
         assertNull(req.header("firstLayerInspection"))
         assertNull(req.header("materialMappings"))
         assertTrue(req.body?.contentType()?.toString()?.startsWith("multipart/form-data") == true)
+    }
+
+    private val c5Mapping = AD5XMaterialMapping(
+        toolId = 2, slotId = 1, materialName = "PLA",
+        toolMaterialColor = "#4DA3FF", slotMaterialColor = "#4DA3FF",
+    )
+
+    @Test
+    fun `Creator 5 upload sends materialMappings when it starts the print`() = runTest {
+        val (api, requests) = capturingApi()
+
+        api.uploadFileCreator5(
+            serialNumber = "SN", checkCode = "CC",
+            fileName = "f.3mf", fileBytes = byteArrayOf(1),
+            startPrint = true, levelBeforePrint = false,
+            useMatlStation = true, gcodeToolCnt = 1,
+            materialMappings = listOf(c5Mapping),
+        ).getOrThrow()
+
+        val b64 = requests.single().header("materialMappings")
+        assertNotNull(b64)
+        val decoded = String(Base64.getDecoder().decode(b64!!), Charsets.UTF_8)
+        assertTrue(decoded.contains("\"toolId\":2"))
+        assertTrue(decoded.contains("\"slotId\":1"))
+    }
+
+    @Test
+    fun `Creator 5 upload leaves materialMappings off an upload that does not start`() = runTest {
+        val (api, requests) = capturingApi()
+
+        api.uploadFileCreator5(
+            serialNumber = "SN", checkCode = "CC",
+            fileName = "f.3mf", fileBytes = byteArrayOf(1),
+            startPrint = false, levelBeforePrint = false,
+            useMatlStation = true, gcodeToolCnt = 1,
+            materialMappings = listOf(c5Mapping),
+        ).getOrThrow()
+
+        assertNull(requests.single().header("materialMappings"))
     }
 
     // ---- isNewFirmware short-circuit (probe exposes the protected check) ----
