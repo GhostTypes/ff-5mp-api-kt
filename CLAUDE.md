@@ -1,200 +1,96 @@
 # CLAUDE.md — ff-5mp-api-kt
 
-Guidance for Claude Code working in this repo.
+Kotlin/JVM (Android-first) client library for FlashForge 3D printers, ported from
+[`ff-5mp-api-ts`](https://github.com/GhostTypes/ff-5mp-api-ts). Single Gradle module `:ffapi`
+(`com.android.library`), package `me.ghost.ffapi`, published as `me.ghost:ff-5mp-api-kt`.
+Primary consumer: the [FlashForgeUI Android app](https://github.com/Parallel-7/FlashForgeUI-Android).
+
+User docs: `README.md`. Intentional divergences from the TS lib: `docs/parity.md` (keep it current).
+Release history: `CHANGELOG.md` (Keep a Changelog + SemVer).
 
 ## Git workflow
 
-**Commit and push directly to `main`.** Do NOT create branches or PRs unless the user explicitly
-asks. Commit at logical checkpoints to keep history organized, and push whenever convenient.
-`local.properties` (the local Android SDK path) is gitignored and must never be committed.
+- **Commit and push straight to `main`** — sole maintainer; no branches or PRs unless asked.
+- `local.properties` (SDK path) is gitignored and must never be committed.
 
-## What this is
+## Build, test, release
 
-A **Kotlin/JVM (Android-first) port of the `ff-5mp-api-ts` TypeScript library** — a clean-room
-client library for FlashForge 3D printers (Adventurer **5M / 5M Pro / AD5X** and **Creator 5 /
-Creator 5 Pro**, plus legacy **Adventurer 3 / 4** over TCP). It speaks the FlashForge LAN wire
-protocol:
+Gradle wrapper 9.3.1 / AGP 9.1.1 on JDK 25. Library code targets Java 11.
 
-- **HTTP REST** on port **8898** (modern 5M/5M Pro/AD5X; **Creator 5 / Creator 5 Pro are
-  HTTP-only** — they have no usable legacy TCP/8899 control channel)
-- **TCP G-code/M-code** on port **8899** (5M family + legacy; control-only for 5M, full polling
-  for legacy). The Creator 5 family must not use this path.
-- **MJPEG camera** on port **8080**
-- **UDP discovery** (broadcast/multicast)
-- Per-request auth via `serialNumber` + `checkCode` on the HTTP path
+```
+./gradlew :ffapi:testDebugUnitTest      # unit tests (local JVM, no device)
+./gradlew :ffapi:assembleRelease        # build the AAR
+./gradlew :ffapi:publishToMavenLocal    # install me.ghost:ff-5mp-api-kt:<version> locally
+```
 
-The goal is a **1:1 port of the TS library's public surface** (same client hierarchy, same
-method names where idiomatic Kotlin allows), packaged as a standalone library so it can be
-consumed by the Android app (and potentially other Kotlin/JVM projects) instead of each app
-re-implementing the protocol.
+**Releasing a version** (the app's CI depends on every step):
+1. Bump `version` in the `publishing` block of `ffapi/build.gradle.kts` (and its comment).
+2. Move `CHANGELOG.md` `[Unreleased]` entries under the new version; update README version refs.
+3. Commit, tag **`v<version>`**, push the commit **and the tag**.
+4. `publishToMavenLocal`, then bump the pin in the app's `app/build.gradle.kts`. The app's CI checks
+   out this repo at `v<pinned version>`, so an untagged version breaks it.
 
-## Why we're building it
+## Scope and structure
 
-The Android app (`flashforgeui-app`, see below) currently has its own in-tree copy of all the
-protocol code under `api/` and `backend/`. That code grew organically and is tangled with the
-app's UI/state concerns. Extracting a dedicated library:
+```
+me.ghost.ffapi
+├── PrinterModel / PrinterConfig    pid → model detection; per-printer connection input
+├── api/            FlashForgeHttpApi (OkHttp, 8898), PrinterDiscovery (UDP),
+│                   controls/ (per-model HTTP helpers, palettes), server/ (endpoints, payloads)
+├── backend/        PrinterBackend strategy tier — the recommended high-level API:
+│                   DualApiBackend → 5M / 5M Pro / AD5X, Creator5Backend (HTTP-only),
+│                   GenericLegacyBackend (TCP), PrinterBackendFactory
+├── tcpapi/         FlashForgeTcpClient (socket, keep-alive, reconnect) → FlashForgeClient (typed
+│                   commands), client/ (G-codes, GCodeController), replays/ (TCP response parsers)
+├── models/         @Serializable wire shapes, MachineInfo.fromDetail → FFMachineInfo, MachineState
+└── error/          FlashForgeException hierarchy (AuthException, ApiErrorException, …)
+```
 
-- **Shrinks the app** and separates protocol concerns from UI/state.
-- Gives a **single source of truth** for the wire protocol, maintained against the TS reference.
-- Is **reusable** beyond this one app.
+Only FlashForge protocol belongs here. App concerns (UI, persistence, Spoolman, NFC) stay in the app.
 
-The end state: this library becomes the dependency, and the app **rips out** its own
-`api/`/`backend/` packages and depends on this instead. (Scope/structure — separate Gradle
-module in the app repo vs. its own repo/Maven artifact — this repo is the standalone-repo
-approach.)
+## Reference material
 
-## Source-of-truth references (READ THESE — they are the ground truth)
+Siblings of this repo (`../`), all by the same maintainer:
+- `ff-5mp-api-ts` — the reference implementation. Mirror its public surface (`src/index.ts`) and
+  port its tests; firmware quirks live in them. Record any deliberate divergence in `docs/parity.md`.
+- `ff-5mp-api-py` — Python port; source of some fixes (temp sentinels, `has_chamber_sensor`).
+- `flashforge-api-docs` — protocol docs (`docs-wiki/`: HTTP, TCP, discovery, auth, error codes,
+  per-model pages; `endpoints/`: captured specs). Explains *why* when the TS code is unclear.
+- `FlashForgeUI-Electron` — desktop app; origin of the per-model backend tier.
+- `flashforge-emulator-v2` — headless printer emulator (legacy A3/A4 + modern).
 
-All paths are siblings under `C:\Users\coper\Documents\GitHub\1flashforge_printers\`:
+## Protocol rules (hardware-verified — preserve)
 
-### 1. `ff-5mp-api-ts/` — the library to port (PRIMARY reference)
-
-The TypeScript library we are porting **1:1**. Mirror its architecture and public API. Key files:
-
-- `src/index.ts` — the complete public export surface. **Match this.**
-- `src/FiveMClient.ts` — main client for modern printers; composes HTTP control modules + embeds
-  a TCP client. Submodules: `control` (Control), `jobControl` (JobControl), `info` (Info),
-  `files` (Files), `tempControl` (TempControl), `tcpClient` (FlashForgeClient).
-- `src/api/controls/` — `Control.ts`, `Files.ts`, `Info.ts`, `JobControl.ts`, `TempControl.ts`
-- `src/api/server/` — `Endpoints.ts` (HTTP endpoints), `Commands.ts` (HTTP command payload types)
-- `src/api/network/` — `NetworkUtils.ts`, `FNetCode.ts`, `DiscoveryErrors.ts`
-- `src/api/PrinterDiscovery.ts` — UDP discovery (276-byte modern + 140-byte legacy parsing)
-- `src/api/filament/Filament.ts`, `src/api/misc/` (Temperature, ScientificNotationFloatConverter)
-- `src/models/ff-models.ts` — raw API shapes incl. AD5X IFS types (`MatlStationInfo`, `SlotInfo`,
-  `AD5XMaterialMapping`, `AD5X*JobParams`, etc.)
-- `src/models/MachineInfo.ts` — `MachineInfo.fromDetail()`: transforms raw `FFPrinterDetail` into
-  the structured `FFMachineInfo`. **Pid-first model detection** (35=5M, 36=5M Pro, 38=AD5X,
-  40=Creator 5, 41=Creator 5 Pro via `KNOWN_HTTP_PIDS`); do NOT substring-match user-mutable
-  `detail.name`.
-- `src/tcpapi/` — `FlashForgeTcpClient.ts` (low-level socket + keep-alive), `FlashForgeClient.ts`
-  (generic legacy), `FlashForgeA3Client.ts` / `FlashForgeA4Client.ts` (documented legacy clients),
-  `client/GCodes.ts` (G-code definitions), `client/GCodeController.ts` / `A3GCodeController.ts`,
-  `replays/` (TCP response parsers: `PrinterInfo`, `TempInfo`, `EndstopStatus`, `PrintStatus`,
-  `LocationInfo`, `ThumbnailInfo` — each has `fromReplay(response)`).
-- `CLAUDE.md`, `README.md`, `docs/` (`clients.md`, `modules.md`, `protocols.md`, `parity.md`,
-  `MIGRATION_GUIDE.md`) — read these for intent and the public-API contract.
-- Tests are co-located `*.test.ts` (Vitest). **Port the tests too** — they encode the parsing
-  edge cases (firmware quirks) we must preserve.
-
-### 2. `flashforge-api-docs/` — protocol documentation
-
-Community-documented wire protocol. When the TS code is unclear, this explains *why*.
-
-- `docs-wiki/` — the wiki markdown. Most relevant pages:
-  - `HTTP-REST-API.md`, `TCP-Protocol.md`, `Discovery-Protocol.md`, `Authentication.md`
-  - `G‐Code-Reference.md`, `M-Code-Reference.md`, `State-Machines.md`, `Error-Codes.md`
-  - `Capability-Matrix.md`
-  - Per-model: `Adventurer-5M-Series.md`, `Adventurer-5M-Pro-Features.md`, `AD5X.md`,
-    `AD5X-IFS-Material-Station.md`, `AD5X-IFS-Serial-Protocol.md`, `Adventurer-3-Series.md`,
-    `Adventurer-4-Series.md`
-- `endpoints/` — captured API specs: `endpoints_5m_3.2.7.yaml`, `endpoints_ad5x_1.1.7.yaml`,
-  `endpoints_ad5x_1.2.1.yaml`, `networkserver_commands_adventurer3.yaml`,
-  `networkserver_commands_adventurer4.yaml`
-- `ai_reference/` — additional reference material
-
-### 3. `FlashForgeUI-Electron/` — the original desktop app
-
-The Electron app the TS library was built for. Useful to see how the library is consumed in
-practice and how the per-model backends are wired.
-
-## The Android app this library is for: `flashforgeui-app`
-
-Located at `C:\Users\coper\Documents\Prototyping\flashforgeui-app` — native Android (Kotlin +
-Jetpack Compose) LAN monitor/control for FlashForge 5M / 5M Pro / AD5X. Package
-`me.ghost.ffui`. This is the **primary consumer**; the library's API should make the app's needs
-easy. Read its `CLAUDE.md` for full detail. What matters for this port:
-
-### Code to extract / replace (the app's current in-tree protocol layer)
-
-These app packages are what this library replaces. They are an existing Kotlin implementation of
-the same protocol — useful as a **secondary reference** (they already solved Android/Kotlin-specific
-issues), but the TS lib is the structural source of truth. Port the *shape* from TS; borrow
-Kotlin/Android lessons from here.
-
-- `app/src/main/java/me/ghost/ffui/api/`
-  - `FlashForgeHttpApi.kt` — OkHttp + kotlinx.serialization; POST `/detail`, `/product`, `/control`
-  - `FlashForgeTcpClient.kt` — raw Socket on 8899; M601 lock, synchronous
-    `sendCommandWithResponse` (CompletableDeferred + Mutex), `KeepAliveMode`
-    (MODERN/LEGACY_POLL/NONE), auto-reconnect w/ exponential backoff, M661 file list, M662 thumbnail
-  - `PrinterModel.kt` — `PrinterModel` enum + pid-based detection + M115 fallback; `PrinterCapabilities`
-  - `FlashForgeModels.kt` — `@Serializable` shapes; `/detail` carries `matlStationInfo` inline
-  - `UdpDiscovery.kt` — UDP broadcast scan (`WifiManager.MulticastLock`). **The empty broadcast
-    payload is deliberate — it works on real hardware; do not change it.**
-- `app/src/main/java/me/ghost/ffui/backend/` — per-model strategy layer (mirrors the Electron
-  backends): `PrinterBackend` (abstract), `DualApiBackend` (modern base, polls HTTP `/detail`),
-  `Adventurer5MBackend` / `Adventurer5MProBackend` / `AD5XBackend` / `GenericLegacyBackend`
-  (TCP polling via M105+M119+M27, M25/M24/M26 job control, M23+M24 start), `PrinterBackendFactory`.
-
-> **NOT part of this library:** the app's `api/SpoolmanApi.kt` and `api/SpoolmanModels.kt` are a
-> separate Spoolman-server integration, unrelated to the FlashForge protocol. Leave them in the app.
-
-### Hard-won protocol lessons from the app (apply these in the port)
-
-These are verified against live hardware (an AD5X on firmware 3.1.0) and the
-`flashforge-emulator-v2` (headless A3). Preserve them:
-
-- **Cleartext HTTP/TCP is required** — printers are plain HTTP/TCP, no TLS. (On Android this
-  needs a network-security-config; that's the *app's* concern, but the library must not assume TLS.)
-- **Firmware serializes numbers inconsistently** (decimals vs ints). Every numeric `/detail`
-  field must be a nullable **`Float?`**, **not** Int — only `pid` is an Int. (`Float`, not `Double`:
-  it's the unification target shared with the consuming app's `Float`-native Compose UI, so reads
-  cross the boundary with no conversion. Don't reintroduce `Double` — see `docs/parity.md`.)
-- **`/detail` is the single source of truth for modern printers** (status + IFS inline). TCP is
-  control-only for modern (custom LEDs `~M146`, homing `~G28`). Only the legacy backend polls over TCP.
-- **Model detection is pid-based** (35=5M, 36=5M Pro, 38=AD5X, 40=Creator 5, 41=Creator 5 Pro) on
-  first `/detail`; legacy printers fall back to TCP `~M115` `Machine Type:` string. Never
-  substring-match the user-mutable name.
-- **Networking on IO dispatcher**; socket reads use `soTimeout = 10000`. Release the TCP lock
-  (`~M602`) and close socket/reader/writer in teardown.
-- **Temperature SET transport differs by family.** For 5M/5M Pro/AD5X, set temps over TCP G-code
-  (M104/M140) — the HTTP `temperatureCtl_cmd` path is unverified for them, so prefer TCP. For the
-  **Creator 5 family (HTTP-only)** there is no TCP path: use the verified HTTP
-  `temperatureCtl_cmd` with the per-tool `nozzles[]` array (exactly 4 entries; use `0`, **not**
-  `-100`, to turn a tool off — firmware ignores `-100` inside `nozzles[]`).
-- **Legacy specifics** (emulator-verified): M119 (status/LED/current file), M105 (temps), M27
-  (progress); job control M25/M24/M26; start M23+M24; file list M661 (A4 `::`-delimited vs A3
-  `info_list.size:`); thumbnail M662 (A4 raw PNG vs A3 `0xa2a22a2a` magic header); LED control
-  A4/Generic `~M146 r255...` (RGB) vs A3 `~M146 1/0` (on/off); A3 firmware uses `echo:`/`ack:`
-  prefixes, IDLE status, `LEDStatus:`, `PrintFileName:`, fire-and-forget motion, M105 ok-prefix.
-- **Creator 5 family is HTTP-only.** It exposes no usable legacy TCP/8899 control channel, so
-  `Creator5Backend` fails fast (`NotSupportedException`) on TCP-only ops (`home()`, file listing)
-  rather than hanging on a dead socket. Capability baselines: `hasMaterialStation=true`,
-  `chamberTempControl=true` (heated chamber, firmware-capped at 80 °C); filtration control is
-  forced on for the **Pro** only.
-- **Both slot-color wire formats use a fixed 24-entry firmware palette.** The AD5X and the
-  Creator 5 series each render a slot icon only on a byte-for-byte, case-sensitive match against
-  their OWN 24-entry palette (they differ: Blue is `#45A8F9` on the AD5X, `#4CAAF8` on the C5), sent
-  as uppercase `#RRGGBB` WITH the leading `#` on both. Snap incoming colors via
-  `Ad5xPalette` / `Creator5Palette` (CIEDE2000 nearest-color in CIE L\*a\*b\* space, shared machinery
-  in `PaletteSnap`).
-- **Creator 5 tool-changer / heated-chamber control** is model-specific: `setToolTemp(toolIndex,
-  …)`, `setToolTemps(list)`, `cancelToolTemp(i)` (4-head tool changer) plus capability-gated
-  `setChamberTemp(celsius)` / `cancelChamberTemp()`.
-- **`/product` is unreliable for capability detection.** It reports filtration/TVOC/door flags
-  correctly for the 5M Pro but returns **wrong** values for the Creator 5 Pro. Gate these
-  capabilities on the **firmware pid (model identity)**, not on `/product`-derived client flags
-  (e.g. surface filtration/TVOC/door only for `is_pro` OR `is_creator5_pro`).
-
-## Porting approach (suggested — confirm structure before deep work)
-
-1. **Gradle/packaging shape** — now a pure Kotlin/JVM library (module `ffapi`, coordinates
-   `me.ghost:ff-5mp-api-kt`, currently **0.2.0**). Published **via `mavenLocal()` only** (no
-   remote registry, no git tags); the consuming app pulls it with `./gradlew
-   :ffapi:publishToMavenLocal`. Keeping the core pure Kotlin/JVM (no Android framework deps where
-   avoidable — e.g. discovery's `MulticastLock` is Android-specific and may need an abstraction)
-   maximizes reuse.
-2. **Mirror the TS package layout** under `src/main/kotlin/` (or KMP `commonMain`): `client`,
-   `api/controls`, `api/server`, `api/network`, `models`, `tcpapi`, `tcpapi/replays`.
-3. **Port models + parsers first** (`ff-models` → data classes, `MachineInfo.fromDetail`,
-   `replays/*`), then the TCP client, then the HTTP controls, then `FiveMClient` on top.
-4. **Port the tests alongside** each unit — they encode firmware edge cases.
-5. Use **kotlinx.serialization** (the app's existing convention) — `@Serializable`,
-   `Json { ignoreUnknownKeys = true; explicitNulls = false }`. OkHttp for HTTP, raw `Socket` for TCP.
+- **No TLS.** Printers speak plain HTTP (8898), TCP (8899), MJPEG (8080) and UDP discovery.
+- **Firmware numbers are inconsistent** (`5` vs `5.0`): every numeric wire field is `Float?`, never
+  `Int` or `Double` (the app's Compose UI is `Float`-native). Only `pid` is `Int?`, parsed leniently
+  (JSON number or hex string `"0023"`).
+- **Model detection is pid-first** (35 5M, 36 5M Pro, 38 AD5X, 40 Creator 5, 41 Creator 5 Pro);
+  legacy printers fall back to TCP `~M115` `Machine Type:`. Never substring-match the user-editable
+  printer name.
+- **`/detail` is the source of truth** for modern printers (status, temps, IFS inline). TCP is
+  control-only there; only `GenericLegacyBackend` polls over TCP (M119 + M105 + M27).
+- **Creator 5 family is HTTP-only** — never open 8899; TCP-only ops throw `NotSupportedException`.
+  Temps go over HTTP `temperatureCtl_cmd`: `nozzles[]` has exactly 4 entries and uses `0` (not
+  `-100`) for off; bed/chamber use `-100` to cancel. Chamber control is gated on
+  `FFMachineInfo.hasChamberSensor` (base C5 reports `-108`).
+- **5M / 5M Pro / AD5X temps go over TCP** (M104 / M140).
+- **Temperature sentinels** (`<= -50`) are absent in `FFMachineInfo`; `FFPrinterDetail` keeps raw values.
+- **Envelope errors:** only code `1` is `AuthException`; `-1` / `-2` (bad params / not in LAN mode)
+  are `ApiErrorException` with the firmware message.
+- **Slot colors** must snap to the model's own 24-entry palette (`Ad5xPalette` / `Creator5Palette`,
+  CIEDE2000 via `PaletteSnap`) and be sent as uppercase `#RRGGBB` with the `#`. The palettes differ.
+- **`/product` is unreliable** for the Creator 5 Pro; gate filtration/TVOC/door on pid, not flags.
+- **Discovery:** the empty broadcast payload is deliberate — it works on real hardware.
+- **Legacy (A3/A4, emulator-verified):** M661 file list (A4 `::` vs A3 `info_list.size:`), M662
+  thumbnail (A4 raw PNG vs A3 `0xa2a22a2a` magic), `~M146` LEDs (A4 RGB vs A3 on/off).
+- I/O on `Dispatchers.IO`, `soTimeout = 10000`, 10 s connect timeout; HTTP commands are serialized
+  per client (reads are not). Release `~M602` and close everything on every exit path.
 
 ## Conventions
 
-- Idiomatic Kotlin: `val` over `var`, strict nullability, data classes, coroutines for async
-  (the TS lib is Promise-based — map to `suspend` funs).
-- KDoc the public API.
-- Keep the public surface aligned with `ff-5mp-api-ts/src/index.ts`; note any intentional
-  divergences in a `docs/parity.md` (the TS lib has one to mirror).
+- Idiomatic Kotlin: `val`, strict nullability, data classes, `suspend` funs returning `Result<T>`
+  with typed `FlashForgeException` causes.
+- `kotlinx.serialization` (`ignoreUnknownKeys = true; explicitNulls = false`) + OkHttp; one shared
+  default `OkHttpClient`.
+- KDoc the public API. Port tests alongside code. Changes that alter behavior get a CHANGELOG entry.

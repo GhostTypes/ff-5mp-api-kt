@@ -8,12 +8,11 @@ Speaks the FlashForge LAN wire protocol: HTTP REST (8898), TCP G-code (8899), MJ
 (modern HTTP+TCP; the Creator 5 family is HTTP-only, with no legacy TCP/8899 service),
 plus legacy **Adventurer 3 / 4** (TCP).
 
-Built to replace the in-tree protocol layer of the FlashForge Android app with a
-standalone, reusable library.
+Used by the [FlashForgeUI Android app](https://github.com/Parallel-7/FlashForgeUI-Android).
 
-> **Status:** core ported and verified against a 5M Pro and AD5X. Creator 5 / Creator 5 Pro
-> support is ported (wire formats verified against `ff-5mp-api-ts` v1.6.1) but not yet
-> verified on hardware. See [CLAUDE.md](CLAUDE.md) for the porting plan and
+> **Status:** pre-1.0; the API may still change between minor versions. Verified against a real
+> 5M Pro and AD5X. Creator 5 / Creator 5 Pro support matches the `ff-5mp-api-ts` wire formats but
+> has not been tested on hardware. See [CHANGELOG.md](CHANGELOG.md) for releases and
 > [docs/parity.md](docs/parity.md) for intentional divergences from the TS lib.
 
 ## What's implemented
@@ -34,15 +33,19 @@ standalone, reusable library.
 
 Not yet ported (see parity.md): `FiveMClient` module split, A3/A4 subclasses, camera probe.
 
-## Consuming it from the app
+## Using it
 
-Build and install to the local Maven repo:
+The library is not on a public Maven repository yet. Build a tagged release into your local
+Maven repo:
 
 ```bash
+git clone https://github.com/GhostTypes/ff-5mp-api-kt.git
+cd ff-5mp-api-kt
+git checkout v0.5.0
 ./gradlew :ffapi:publishToMavenLocal   # publishes me.ghost:ff-5mp-api-kt:0.5.0
 ```
 
-In the app, add `mavenLocal()` to the repositories and depend on it:
+Then add `mavenLocal()` to your repositories and depend on it:
 
 ```kotlin
 // settings.gradle.kts (dependencyResolutionManagement { repositories { ... } })
@@ -61,3 +64,9 @@ Then construct a `FlashForgeHttpApi` + `FlashForgeClient`, resolve the model via
 ./gradlew :ffapi:testDebugUnitTest   # unit tests (run on the local JVM)
 ./gradlew :ffapi:assembleRelease     # build the AAR
 ```
+
+Requires JDK 25 (the Gradle toolchain) and the Android SDK (platform 36.1).
+
+## License
+
+[MIT](LICENSE)
